@@ -24,35 +24,32 @@ export function AthleteAvatar({ athlete, onLogout }: AthleteAvatarProps) {
     return (
         <Popover>
             <PopoverTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 rounded-full">
+                <Button variant="ghost" className="h-8 w-8 rounded-full p-0 hover:ring-2 hover:ring-[#FC4C02]/40 transition-all">
                     <Avatar className="h-8 w-8">
                         <AvatarImage src={athlete.profile} alt={`${athlete.firstname} ${athlete.lastname}`} />
-                        <AvatarFallback>{athlete.firstname[0]}{athlete.lastname[0]}</AvatarFallback>
+                        <AvatarFallback className="bg-[#FC4C02]/10 text-[#FC4C02] text-xs font-semibold">{athlete.firstname[0]}{athlete.lastname[0]}</AvatarFallback>
                     </Avatar>
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-80">
-                <div className="flex justify-start items-center space-x-2">
-                    <Avatar className="h-12 w-12">
+            <PopoverContent className="w-64 sm:w-72 bg-[#16161d] border border-white/[0.08] text-white shadow-xl rounded-xl p-4">
+                <div className="flex items-center gap-3">
+                    <Avatar className="h-11 w-11">
                         <AvatarImage src={athlete.profile} alt={`${athlete.firstname} ${athlete.lastname}`} />
-                        <AvatarFallback>{athlete.firstname[0]}{athlete.lastname[0]}</AvatarFallback>
+                        <AvatarFallback className="bg-[#FC4C02]/10 text-[#FC4C02] font-semibold">{athlete.firstname[0]}{athlete.lastname[0]}</AvatarFallback>
                     </Avatar>
                     <div>
-                        <h4 className="font-semibold text-sm">{athlete.firstname} {athlete.lastname}</h4>
-                        <p className="text-sm text-muted-foreground">{athlete.city}</p>
+                        <h4 className="font-semibold text-sm text-white">{athlete.firstname} {athlete.lastname}</h4>
+                        <p className="text-xs text-[#71717a] mt-0.5">{athlete.city}</p>
                     </div>
                 </div>
-                <div className="mt-4 space-y-2">
-                    <div className="flex items-center">
-                        <User className="mr-2 h-4 w-4 opacity-70" />
-                        <span className="text-sm font-medium">Athlete ID: {athlete.id}</span>
-                    </div>
-                </div>
-                <div className="mt-4">
-                    <Button variant="outline" className="w-full" onClick={onLogout}>
-                        <LogOut className="mr-2 h-4 w-4" />
-                        Log out
-                    </Button>
+                <div className="mt-4 pt-3 border-t border-white/[0.06]">
+                    <button
+                        onClick={onLogout}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-[#71717a] hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
+                    >
+                        <LogOut className="h-3.5 w-3.5" />
+                        Sign out
+                    </button>
                 </div>
             </PopoverContent>
         </Popover>

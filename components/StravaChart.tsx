@@ -1,175 +1,316 @@
 "use client"
 
 import * as React from "react"
-import {CartesianGrid, BarChart, ResponsiveContainer, Tooltip, Legend, XAxis, YAxis, Bar, TooltipProps} from "recharts"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
+import { motion } from "framer-motion"
+import { CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Bar, Scatter, Cell } from "recharts"
 import { StravaActivity } from "@/types/strava"
-
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+import { decodePolyline } from '@/lib/polyline'
+import { AnimatedNumber } from './AnimatedNumber'
+import { SpotlightCard } from './SpotlightCard'
+import { Trophy } from 'lucide-react'
 
 interface ChartComponentProps {
     activities: StravaActivity[]
 }
 
-const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
-    if (active && payload && payload.length) {
-        return (
-            <div className="bg-gray-800 p-4 border border-gray-700 rounded shadow-lg">
-                <p className="font-bold text-gray-200">{label}</p>
-                <p className="text-[#8884d8]">Distance: {payload[0].value?.toFixed(2)} km</p>
-                {payload[1] && <p className="text-[#82ca9d]">Duration: {payload[1].value?.toFixed(2)} hours</p>}
-            </div>
-        );
-    }
-    return null;
-};
+interface ChartEntry {
+    date: string
+    fullDate: string
+    name: string
+    distance: number
+    movingTime: number
+    elevation: number
+    isRace: boolean
+    raceDistance: number | null
+    polyline: [number, number][] | null
+}
 
-export default function ChartComponent({ activities }: ChartComponentProps) {
-    const [showDuration, setShowDuration] = React.useState(false);
+function formatPace(seconds: number, meters: number): string {
+    if (meters === 0) return '—'
+    const paceSeconds = seconds / (meters / 1000)
+    const m = Math.floor(paceSeconds / 60)
+    const s = Math.round(paceSeconds % 60)
+    return `${m}:${s.toString().padStart(2, '0')}`
+}
 
-    console.log("StravaChart received activities:", activities);
+function formatDuration(seconds: number): string {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    const s = seconds % 60
+    if (h > 0) return `${h}h ${m}m ${s}s`
+    return `${m}m ${s}s`
+}
 
-    const chartData = React.useMemo(() => {
-        if (!activities || activities.length === 0) {
-            console.log("No activities or empty array");
-            return [];
-        }
-        console.log("Processing activities for chart data");
-        return activities.map(activity => ({
-            date: new Date(activity.start_date_local).toLocaleDateString(),
-            distance: activity.distance / 1000, // Convert to kilometers
-            duration: activity.moving_time / 3600 // Convert to hours
-        }));
-    }, [activities]);
+function MiniRoute({ points, size = 160 }: { points: [number, number][]; size?: number }) {
+    if (points.length < 2) return null
+    const lats = points.map(p => p[0])
+    const lngs = points.map(p => p[1])
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats)
+    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs)
 
-    console.log("Processed chart data:", chartData);
+    const midLat = (minLat + maxLat) / 2
+    const lngScale = Math.cos((midLat * Math.PI) / 180)
 
-    const total = React.useMemo(
-        () => ({
-            duration: chartData.reduce((acc, curr) => acc + curr.duration, 0),
-            distance: chartData.reduce((acc, curr) => acc + curr.distance, 0),
-        }),
-        [chartData]
-    )
-    console.log("Calculated totals:", total);
-    
-    if (!activities || activities.length === 0) {
-        return (
-            <Card className="bg-black text-gray-100">
-                <CardHeader>
-                    <CardTitle>Line Chart - Interactive</CardTitle>
-                    <CardDescription className="text-gray-400">
-                        No activity data available
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="flex items-center justify-center h-64">
-                    <p>No activities to display</p>
-                </CardContent>
-            </Card>
-        );
-    }
+    const rawW = (maxLng - minLng) * lngScale || 0.0001
+    const rawH = (maxLat - minLat) || 0.0001
+
+    // Fit into fixed square, centered
+    const pad = 12
+    const inner = size - pad * 2
+    const scale = inner / Math.max(rawW, rawH)
+    const routeW = rawW * scale
+    const routeH = rawH * scale
+    const offsetX = pad + (inner - routeW) / 2
+    const offsetY = pad + (inner - routeH) / 2
+
+    const coords = points.map(([lat, lng]) => {
+        const x = offsetX + (lng - minLng) * lngScale * scale
+        const y = offsetY + (maxLat - lat) * scale
+        return [x, y] as [number, number]
+    })
+
+    const svgPoints = coords.map(([x, y]) => `${x},${y}`).join(' ')
+    const [sx, sy] = coords[0]
+    const [ex, ey] = coords[coords.length - 1]
+
     return (
-        <Card className="bg-black text-gray-100">
-            <CardHeader className="flex flex-col items-stretch space-y-0 border-b border-gray-800 p-0 sm:flex-row">
-                <div className="flex flex-1 flex-col justify-center gap-1 px-6 py-5 sm:py-6">
-                    <CardTitle>Line Chart - Interactive</CardTitle>
-                    <CardDescription className="text-gray-400">
-                        Showing last {activities.length} recent activities
-                    </CardDescription>
-                </div>
-                <div className="flex items-center px-6 py-5 sm:py-6">
-                    <Switch
-                        id="show-duration"
-                        checked={showDuration}
-                        onCheckedChange={setShowDuration}
-                        className="data-[state=checked]:bg-blue-500"
-                    />
-                    <Label htmlFor="show-duration" className="ml-2 text-gray-300">
-                        Show Duration
-                    </Label>
-                </div>
-            </CardHeader>
-            <CardContent className="px-2 sm:p-6 bg-black text-white border border-gray-800">
-                <ResponsiveContainer width="100%" height={400}>
-                    <BarChart
-                        data={chartData}
-                        margin={{
-                            top: 5,
-                            right: 30,
-                            left: 20,
-                            bottom: 5,
-                        }}
-                    >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                        <XAxis
-                            dataKey="date"
-                            stroke="#9CA3AF"
-                            tick={{ fill: '#9CA3AF' }}
-                        />
-                        <YAxis
-                            yAxisId="left"
-                            stroke="#9CA3AF"
-                            tick={{ fill: '#9CA3AF' }}
-                        />
-                        {showDuration && (
-                            <YAxis
-                                yAxisId="right"
-                                orientation="right"
-                                stroke="#9CA3AF"
-                                tick={{ fill: '#9CA3AF' }}
-                            />
-                        )}
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend/>
-                        <Bar
-                            yAxisId="left"
-                            dataKey="distance"
-                            fill="#8884d8"
-                            name="Distance (km)"
-                        />
-                        {showDuration && (
-                            <Bar
-                                yAxisId="right"
-                                dataKey="duration"
-                                fill="#82ca9d"
-                                name="Duration (hours)"
-                            />
-                        )}
-                    </BarChart>
-                </ResponsiveContainer>
-                <div className="flex space-x-8 ">
-                    <div className="flex items-center">
-                        <div className="w-4 h-4 bg-[#8884d8] mr-2"></div>
-                        <span className="text-gray-300">Distance (km)</span>
-                    </div>
-                    {showDuration && (
-                        <div className="flex items-center">
-                            <div className="w-4 h-4 bg-[#82ca9d] mr-2"></div>
-                            <span className="text-gray-300">Duration (hours)</span>
-                        </div>
-                    )}
-                </div>
-                <div className="flex space-x-8 ">
-                    <div>
-                        <h3 className="text-sm font-medium text-gray-400">Total Distance</h3>
-                        <p className="text-2xl font-semibold text-gray-100">{total.distance.toFixed(2)} km</p>
-                    </div>
-                    {showDuration && (
-                        <div>
-                            <h3 className="text-sm font-medium text-gray-400">Total Duration</h3>
-                            <p className="text-2xl font-semibold text-gray-100">{total.duration.toFixed(2)} hours</p>
-                        </div>
-                    )}
-                </div>
-            </CardContent>
-        </Card>
+        <svg width={size} height={size}>
+            <polyline points={svgPoints} fill="none" stroke="#f59e0b" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" strokeOpacity={0.7} />
+            <circle cx={sx} cy={sy} r={2.5} fill="#22c55e" />
+            <circle cx={ex} cy={ey} r={2.5} fill="#ef4444" />
+        </svg>
     )
 }
 
+function RacePopup({ entry }: { entry: ChartEntry }) {
+    return (
+        <div className="bg-[#1c1c26]/95 backdrop-blur-sm border border-amber-500/20 rounded-xl px-4 py-3 shadow-2xl text-sm min-w-[200px]">
+            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/[0.06]">
+                <div className="flex items-center justify-center w-6 h-6 rounded-md bg-amber-500/20">
+                    <Trophy className="h-3.5 w-3.5 text-amber-400" />
+                </div>
+                <div className="min-w-0">
+                    <p className="text-amber-400 font-semibold text-xs uppercase tracking-wide">Race</p>
+                    <p className="text-white font-semibold text-sm leading-tight truncate max-w-[180px]">{entry.name}</p>
+                </div>
+            </div>
+            <p className="text-[#52525b] text-[10px] mb-2">{entry.fullDate}</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <div>
+                    <p className="text-[#52525b] text-[9px] uppercase tracking-wide">Distance</p>
+                    <p className="text-white text-sm font-bold tabular-nums">{entry.distance.toFixed(2)} km</p>
+                </div>
+                <div>
+                    <p className="text-[#52525b] text-[9px] uppercase tracking-wide">Time</p>
+                    <p className="text-white text-sm font-bold tabular-nums">{formatDuration(entry.movingTime)}</p>
+                </div>
+                <div>
+                    <p className="text-[#52525b] text-[9px] uppercase tracking-wide">Pace</p>
+                    <p className="text-white text-sm font-bold tabular-nums">{formatPace(entry.movingTime, entry.distance * 1000)} /km</p>
+                </div>
+                <div>
+                    <p className="text-[#52525b] text-[9px] uppercase tracking-wide">Elevation</p>
+                    <p className="text-white text-sm font-bold tabular-nums">{Math.round(entry.elevation)} m</p>
+                </div>
+            </div>
+            {entry.polyline && entry.polyline.length > 1 && (
+                <div className="mt-2 flex justify-center">
+                    <MiniRoute points={entry.polyline} />
+                </div>
+            )}
+        </div>
+    )
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function CustomTooltip({ active, payload }: any) {
+    if (!active || !payload?.length) return null
+    const entry = payload[0]?.payload as ChartEntry | undefined
+    if (!entry || entry.isRace) return null // races handled by RacePopup
+
+    return (
+        <div className="bg-[#1c1c26]/95 backdrop-blur-sm border border-white/[0.08] rounded-lg px-3 py-2.5 shadow-2xl text-sm">
+            <p className="text-[#71717a] text-xs mb-1">{entry.fullDate}</p>
+            <p className="text-[#FC4C02] font-semibold">{entry.distance.toFixed(2)} km</p>
+            <p className="text-[#52525b] text-[10px] mt-0.5">{entry.name}</p>
+        </div>
+    )
+}
+
+export default function ChartComponent({ activities }: ChartComponentProps) {
+    const [showRaces, setShowRaces] = React.useState(true)
+    const [hoveredRace, setHoveredRace] = React.useState<{ entry: ChartEntry; x: number; y: number } | null>(null)
+    const chartWrapperRef = React.useRef<HTMLDivElement>(null)
+
+    const chartData = React.useMemo<ChartEntry[]>(() => {
+        if (!activities || activities.length === 0) return []
+        return [...activities]
+            .sort((a, b) => new Date(a.start_date_local).getTime() - new Date(b.start_date_local).getTime())
+            .map(activity => {
+                const isRace = activity.workout_type === 1
+                const dist = parseFloat((activity.distance / 1000).toFixed(2))
+                return {
+                    date: new Date(activity.start_date_local).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
+                    fullDate: new Date(activity.start_date_local).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
+                    name: activity.name,
+                    distance: dist,
+                    movingTime: activity.moving_time,
+                    elevation: activity.total_elevation_gain,
+                    isRace,
+                    raceDistance: isRace ? dist : null,
+                    polyline: isRace && activity.map?.summary_polyline
+                        ? decodePolyline(activity.map.summary_polyline)
+                        : null,
+                }
+            })
+    }, [activities])
+
+    const total = React.useMemo(() => ({
+        distance: chartData.reduce((acc, curr) => acc + curr.distance, 0),
+        races: chartData.filter(d => d.isRace).length,
+    }), [chartData])
+
+    if (!activities || activities.length === 0) {
+        return (
+            <div className="rounded-xl bg-[#16161d] border border-white/[0.06] h-full flex items-center justify-center">
+                <p className="text-[#52525b] text-sm">No activities to display</p>
+            </div>
+        )
+    }
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            className="h-full"
+        >
+        <SpotlightCard className="rounded-xl bg-[#16161d] border border-white/[0.06] overflow-hidden h-full flex flex-col card-glow" spotlightSize={350}>
+            <div className="h-0.5 w-full bg-gradient-to-r from-[#FC4C02] to-amber-400" />
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-white/[0.06] flex items-center justify-between flex-shrink-0 gap-2">
+                <div className="min-w-0">
+                    <h2 className="text-sm font-semibold text-white">Activity Chart</h2>
+                    <p className="text-xs text-[#52525b] mt-0.5">{activities.length} activities</p>
+                </div>
+                <div className="flex items-center gap-3 sm:gap-5 flex-shrink-0">
+                    <div className="text-right hidden sm:block">
+                        <p className="text-xs text-[#52525b]">Total Distance</p>
+                        <p className="text-sm font-bold text-white tabular-nums">
+                            <AnimatedNumber value={total.distance} format={(v) => `${v.toFixed(1)} km`} />
+                        </p>
+                    </div>
+                    {total.races > 0 && (
+                        <button
+                            onClick={() => setShowRaces(!showRaces)}
+                            className={`text-xs px-3 py-2 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                                showRaces
+                                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
+                                    : 'bg-white/[0.04] border-white/[0.08] text-[#71717a] hover:text-white hover:border-white/[0.12]'
+                            }`}
+                        >
+                            <Trophy className="h-3 w-3" />
+                            <span className="hidden sm:inline">Races</span>
+                            <span className="text-[10px] opacity-70">{total.races}</span>
+                        </button>
+                    )}
+                </div>
+            </div>
+            <div className="flex-1 px-2 sm:px-4 py-4 min-h-0 relative" ref={chartWrapperRef}>
+                <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={chartData} margin={{ top: 16, right: 4, left: -10, bottom: 4 }}>
+                        <defs>
+                            <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#FC4C02" stopOpacity={1} />
+                                <stop offset="100%" stopColor="#FC4C02" stopOpacity={0.6} />
+                            </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                        <XAxis
+                            dataKey="date"
+                            stroke="transparent"
+                            tick={{ fill: '#52525b', fontSize: 10 }}
+                            tickLine={false}
+                            axisLine={false}
+                            interval={Math.max(0, Math.floor(chartData.length / 8) - 1)}
+                            angle={-35}
+                            textAnchor="end"
+                            height={50}
+                        />
+                        <YAxis stroke="transparent" tick={{ fill: '#52525b', fontSize: 11 }} tickLine={false} axisLine={false} />
+                        <Tooltip
+                            content={hoveredRace ? () => null : <CustomTooltip />}
+                            cursor={hoveredRace ? false : { fill: 'rgba(252,76,2,0.04)' }}
+                            allowEscapeViewBox={{ x: true, y: true }}
+                            offset={20}
+                        />
+                        <Bar
+                            dataKey="distance"
+                            fill="url(#barGradient)"
+                            name="Distance (km)"
+                            radius={[3, 3, 0, 0]}
+                            maxBarSize={24}
+                            animationDuration={800}
+                            animationEasing="ease-out"
+                        />
+                        {showRaces && (
+                            <Scatter
+                                dataKey="raceDistance"
+                                name="Race"
+                                shape={(props: { cx?: number; cy?: number; payload?: ChartEntry }) => {
+                                    if (!props.payload?.isRace || !props.cx || !props.cy) return null
+                                    const entry = props.payload
+                                    return (
+                                        <g
+                                            style={{ cursor: 'pointer' }}
+                                            onMouseEnter={(e) => {
+                                                const rect = chartWrapperRef.current?.getBoundingClientRect()
+                                                if (!rect) return
+                                                setHoveredRace({
+                                                    entry,
+                                                    x: e.clientX - rect.left,
+                                                    y: e.clientY - rect.top,
+                                                })
+                                            }}
+                                            onMouseLeave={() => setHoveredRace(null)}
+                                        >
+                                            {/* Generous hit target */}
+                                            <circle cx={props.cx} cy={props.cy - 10} r={16} fill="transparent" />
+                                            {/* Soft glow behind */}
+                                            <circle cx={props.cx} cy={props.cy - 10} r={10} fill="#f59e0b" fillOpacity={0.15} />
+                                            {/* Main circle */}
+                                            <circle cx={props.cx} cy={props.cy - 10} r={7} fill="#f59e0b" stroke="#fbbf24" strokeWidth={1.5} />
+                                            {/* Trophy SVG path, centered in circle */}
+                                            <g transform={`translate(${props.cx - 5}, ${props.cy - 15}) scale(0.42)`}>
+                                                <path d="M6 2h12v2h4v6c0 1.1-.9 2-2 2h-2.3c-.5 1.2-1.4 2.2-2.7 2.7V18h2v2H7v-2h2v-3.3C7.6 14.2 6.7 13.2 6.3 12H4c-1.1 0-2-.9-2-2V4h4V2zm-2 4v4h2V6H4zm16 0h-2v4h2V6z" fill="#451a03" />
+                                            </g>
+                                        </g>
+                                    )
+                                }}
+                            >
+                                {chartData.map((entry, i) => (
+                                    <Cell key={i} fill={entry.isRace ? '#f59e0b' : 'transparent'} />
+                                ))}
+                            </Scatter>
+                        )}
+                    </ComposedChart>
+                </ResponsiveContainer>
+                {/* Custom race popup — positioned via mouse coordinates, flips if overflowing */}
+                {hoveredRace && chartWrapperRef.current && (() => {
+                    const rect = chartWrapperRef.current!.getBoundingClientRect()
+                    const popupH = 320
+                    const popupW = 230
+                    const spaceBelow = rect.height - hoveredRace.y
+                    const spaceRight = rect.width - hoveredRace.x
+                    const top = spaceBelow < popupH ? hoveredRace.y - popupH + 20 : hoveredRace.y - 40
+                    const left = spaceRight < popupW + 20 ? hoveredRace.x - popupW - 8 : hoveredRace.x + 16
+                    return (
+                        <div className="absolute z-50 pointer-events-none" style={{ left, top }}>
+                            <RacePopup entry={hoveredRace.entry} />
+                        </div>
+                    )
+                })()}
+            </div>
+        </SpotlightCard>
+        </motion.div>
+    )
+}
