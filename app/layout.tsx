@@ -16,8 +16,9 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "Strava Visualiser",
   description: "Visualise your Strava training data",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
 };
+
+export const viewport = "width=device-width, initial-scale=1, maximum-scale=1";
 
 export default function RootLayout({
   children,

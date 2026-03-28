@@ -5,7 +5,7 @@ const PER_PAGE = 200
 const MAX_PAGES = 25 // up to 5000 activities
 
 async function getValidAccessToken(): Promise<string | null> {
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const accessToken = cookieStore.get('strava_access_token')?.value
     if (accessToken) return accessToken
 
@@ -26,7 +26,8 @@ async function getValidAccessToken(): Promise<string | null> {
     if (!response.ok) return null
 
     const data = await response.json()
-    cookies().set('strava_access_token', data.access_token, {
+    const cs = await cookies()
+    cs.set('strava_access_token', data.access_token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         maxAge: data.expires_in,
