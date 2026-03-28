@@ -127,6 +127,7 @@ function CustomTooltip({ active, payload }: any) {
     if (!active || !payload?.length) return null
     const entry = payload[0]?.payload as ChartEntry | undefined
     if (!entry || entry.isRace) return null // races handled by RacePopup
+    if (entry.distance === 0) return null   // empty days in year view
 
     return (
         <div className="bg-[#1c1c26]/95 backdrop-blur-sm border border-white/[0.08] rounded-lg px-3 py-2.5 shadow-2xl text-sm">
@@ -142,11 +143,23 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
     const [hoveredRace, setHoveredRace] = React.useState<{ entry: ChartEntry; x: number; y: number } | null>(null)
     const chartWrapperRef = React.useRef<HTMLDivElement>(null)
 
+    const [selectedYear, setSelectedYear] = React.useState<number | null>(null)
+
+    const availableYears = React.useMemo(() => {
+        if (!activities || activities.length === 0) return []
+        const years = new Set(activities.map(a => new Date(a.start_date_local).getFullYear()))
+        return Array.from(years).sort((a, b) => b - a) // newest first
+    }, [activities])
+
     const chartData = React.useMemo<ChartEntry[]>(() => {
         if (!activities || activities.length === 0) return []
-        return [...activities]
+
+        const sorted = [...activities]
             .sort((a, b) => new Date(a.start_date_local).getTime() - new Date(b.start_date_local).getTime())
-            .map(activity => {
+
+        if (selectedYear === null) {
+            // All-time view: current behavior
+            return sorted.map(activity => {
                 const isRace = activity.workout_type === 1
                 const dist = parseFloat((activity.distance / 1000).toFixed(2))
                 return {
@@ -163,7 +176,66 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
                         : null,
                 }
             })
-    }, [activities])
+        }
+
+        // Year view: one entry per calendar day
+        const isLeap = (selectedYear % 4 === 0 && selectedYear % 100 !== 0) || selectedYear % 400 === 0
+        const daysInYear = isLeap ? 366 : 365
+
+        // Group activities by day-of-year
+        const yearActivities = sorted.filter(a => new Date(a.start_date_local).getFullYear() === selectedYear)
+        const dayMap = new Map<string, typeof yearActivities>()
+        for (const a of yearActivities) {
+            const dateKey = a.start_date_local.slice(0, 10) // "YYYY-MM-DD"
+            if (!dayMap.has(dateKey)) dayMap.set(dateKey, [])
+            dayMap.get(dateKey)!.push(a)
+        }
+
+        const entries: ChartEntry[] = []
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+        for (let d = 0; d < daysInYear; d++) {
+            const date = new Date(selectedYear, 0, 1 + d)
+            const dateKey = date.toISOString().slice(0, 10)
+            const dayActivities = dayMap.get(dateKey)
+            const isFirstOfMonth = date.getDate() === 1
+            const label = isFirstOfMonth ? monthNames[date.getMonth()] : ''
+
+            if (dayActivities && dayActivities.length > 0) {
+                const totalDist = dayActivities.reduce((sum, a) => sum + a.distance / 1000, 0)
+                const totalTime = dayActivities.reduce((sum, a) => sum + a.moving_time, 0)
+                const totalElev = dayActivities.reduce((sum, a) => sum + a.total_elevation_gain, 0)
+                const hasRace = dayActivities.some(a => a.workout_type === 1)
+                const raceActivity = dayActivities.find(a => a.workout_type === 1)
+                entries.push({
+                    date: label,
+                    fullDate: date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
+                    name: dayActivities.length === 1 ? dayActivities[0].name : `${dayActivities.length} activities`,
+                    distance: parseFloat(totalDist.toFixed(2)),
+                    movingTime: totalTime,
+                    elevation: totalElev,
+                    isRace: hasRace,
+                    raceDistance: hasRace ? parseFloat(totalDist.toFixed(2)) : null,
+                    polyline: raceActivity?.map?.summary_polyline
+                        ? decodePolyline(raceActivity.map.summary_polyline)
+                        : null,
+                })
+            } else {
+                entries.push({
+                    date: label,
+                    fullDate: date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
+                    name: '',
+                    distance: 0,
+                    movingTime: 0,
+                    elevation: 0,
+                    isRace: false,
+                    raceDistance: null,
+                    polyline: null,
+                })
+            }
+        }
+        return entries
+    }, [activities, selectedYear])
 
     const total = React.useMemo(() => ({
         distance: chartData.reduce((acc, curr) => acc + curr.distance, 0),
@@ -193,6 +265,17 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
                     <p className="text-xs text-[#52525b] mt-0.5">{activities.length} activities</p>
                 </div>
                 <div className="flex items-center gap-3 sm:gap-5 flex-shrink-0">
+                    <select
+                        value={selectedYear ?? ''}
+                        onChange={e => setSelectedYear(e.target.value === '' ? null : Number(e.target.value))}
+                        className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-[#FC4C02]/30 cursor-pointer appearance-none"
+                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', paddingRight: '28px' }}
+                    >
+                        <option value="">All time</option>
+                        {availableYears.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                        ))}
+                    </select>
                     <div className="text-right hidden sm:block">
                         <p className="text-xs text-[#52525b]">Total Distance</p>
                         <p className="text-sm font-bold text-white tabular-nums">
@@ -231,10 +314,11 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
                             tick={{ fill: '#52525b', fontSize: 10 }}
                             tickLine={false}
                             axisLine={false}
-                            interval={Math.max(0, Math.floor(chartData.length / 8) - 1)}
-                            angle={-35}
-                            textAnchor="end"
-                            height={50}
+                            interval={selectedYear !== null ? undefined : Math.max(0, Math.floor(chartData.length / 8) - 1)}
+                            angle={selectedYear !== null ? 0 : -35}
+                            textAnchor={selectedYear !== null ? 'middle' : 'end'}
+                            height={selectedYear !== null ? 30 : 50}
+                            tickFormatter={selectedYear !== null ? (value: string) => value : undefined}
                         />
                         <YAxis stroke="transparent" tick={{ fill: '#52525b', fontSize: 11 }} tickLine={false} axisLine={false} />
                         <Tooltip
