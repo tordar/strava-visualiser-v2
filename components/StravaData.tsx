@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import ChartComponent from "@/components/StravaChart"
 import { Stats } from "@/components/Stats"
 import { AthleteAvatar } from "@/components/AthleteAvatar"
 import YearlyProgressChart from "@/components/YearlyProgressChart"
 import HeatmapTab from "@/components/HeatmapTab"
 import ActivitiesTable from "@/components/ActivitiesTable"
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Menu, X } from 'lucide-react'
 import { AuroraBlobs } from './AuroraBlobs'
 
 const TABS = [
@@ -122,6 +122,7 @@ export default function StravaData() {
     const [error, setError]         = useState<string | null>(null)
     const [activeTab, setActiveTab]  = useState<TabKey>('stats')
     const [sportFilter, setSportFilter] = useState<string>('all')
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
     const router = useRouter()
     const fetchFromAPI = useCallback(async (): Promise<DashboardData> => {
         const response = await fetch('/api/strava/dashboard')
@@ -261,14 +262,14 @@ export default function StravaData() {
                         <h1 className="text-sm sm:text-base font-semibold tracking-tight hidden sm:block">Strava Visualiser</h1>
                     </div>
 
-                    {/* Tab nav with sliding indicator */}
-                    <nav className="flex items-center relative mx-2 sm:mx-6">
+                    {/* Desktop tab nav */}
+                    <nav className="hidden md:flex items-center relative mx-6">
                         <div className="flex items-center bg-white/[0.03] rounded-lg p-0.5 gap-0.5 relative">
                             {TABS.map(tab => (
                                 <button
                                     key={tab.key}
                                     onClick={() => setActiveTab(tab.key)}
-                                    className={`relative z-10 px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                                    className={`relative z-10 px-4 py-1.5 text-sm font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                                         activeTab === tab.key ? 'text-white' : 'text-[#52525b] hover:text-[#a1a1aa]'
                                     }`}
                                 >
@@ -284,6 +285,15 @@ export default function StravaData() {
                             ))}
                         </div>
                     </nav>
+
+                    {/* Mobile: current tab label + hamburger */}
+                    <button
+                        onClick={() => setMobileMenuOpen(true)}
+                        className="flex md:hidden items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] cursor-pointer"
+                    >
+                        <span className="text-xs font-medium text-white">{TABS.find(t => t.key === activeTab)?.label}</span>
+                        <Menu className="h-3.5 w-3.5 text-[#71717a]" />
+                    </button>
 
                     {/* Right controls */}
                     <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
@@ -304,6 +314,80 @@ export default function StravaData() {
                     </div>
                 </div>
             </header>
+
+            {/* Mobile sheet */}
+            <AnimatePresence>
+                {mobileMenuOpen && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="fixed inset-0 bg-black/60 z-40 md:hidden"
+                            onClick={() => setMobileMenuOpen(false)}
+                        />
+                        <motion.div
+                            initial={{ y: '100%' }}
+                            animate={{ y: 0 }}
+                            exit={{ y: '100%' }}
+                            transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+                            className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[#16161d] border-t border-white/[0.08] rounded-t-2xl"
+                        >
+                            <div className="p-5 space-y-5">
+                                {/* Handle bar */}
+                                <div className="w-10 h-1 bg-white/[0.12] rounded-full mx-auto" />
+
+                                {/* Close */}
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-semibold text-white">Navigate</span>
+                                    <button
+                                        onClick={() => setMobileMenuOpen(false)}
+                                        className="w-8 h-8 flex items-center justify-center rounded-lg text-[#52525b] hover:text-white hover:bg-white/[0.06] cursor-pointer"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                </div>
+
+                                {/* Nav items */}
+                                <div className="space-y-1">
+                                    {TABS.map(tab => (
+                                        <button
+                                            key={tab.key}
+                                            onClick={() => { setActiveTab(tab.key); setMobileMenuOpen(false) }}
+                                            className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-colors cursor-pointer ${
+                                                activeTab === tab.key
+                                                    ? 'bg-[#FC4C02]/10 text-[#FC4C02]'
+                                                    : 'text-[#a1a1aa] hover:bg-white/[0.04] hover:text-white'
+                                            }`}
+                                        >
+                                            {tab.label}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Sport filter */}
+                                {sportTypes.length > 1 && (
+                                    <div className="pt-2 border-t border-white/[0.06] space-y-2">
+                                        <span className="text-xs text-[#52525b]">Favourite sport</span>
+                                        <select
+                                            value={sportFilter}
+                                            onChange={e => { setSportFilter(e.target.value); setMobileMenuOpen(false) }}
+                                            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-[#FC4C02]/30 cursor-pointer appearance-none"
+                                            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', paddingRight: '32px' }}
+                                        >
+                                            <option value="all">All sports</option>
+                                            {sportTypes.map(type => (
+                                                <option key={type} value={type}>{type} ({sportCounts[type] || 0})</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
             <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 relative z-10">
                 {activeTab === 'stats' && (
                     <Stats
