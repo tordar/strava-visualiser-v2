@@ -9,7 +9,7 @@ import { AthleteAvatar } from "@/components/AthleteAvatar"
 import YearlyProgressChart from "@/components/YearlyProgressChart"
 import HeatmapTab from "@/components/HeatmapTab"
 import ActivitiesTable from "@/components/ActivitiesTable"
-import { RefreshCw, Menu, X } from 'lucide-react'
+import { RefreshCw, Menu } from 'lucide-react'
 import { AuroraBlobs } from './AuroraBlobs'
 
 const TABS = [
@@ -256,10 +256,10 @@ export default function StravaData() {
             <AuroraBlobs />
             <header className="border-b border-white/[0.06] px-4 sm:px-6 backdrop-blur-md bg-[#0c0c10]/80 sticky top-0 z-30">
                 <div className="max-w-7xl mx-auto flex items-center justify-between h-12 sm:h-14">
-                    {/* Logo */}
+                    {/* Logo — always show full title */}
                     <div className="flex items-center gap-2 flex-shrink-0">
                         <StravaLogo />
-                        <h1 className="text-sm sm:text-base font-semibold tracking-tight hidden sm:block">Strava Visualiser</h1>
+                        <h1 className="text-sm sm:text-base font-semibold tracking-tight">Strava Visualiser</h1>
                     </div>
 
                     {/* Desktop tab nav */}
@@ -286,17 +286,8 @@ export default function StravaData() {
                         </div>
                     </nav>
 
-                    {/* Mobile: current tab label + hamburger */}
-                    <button
-                        onClick={() => setMobileMenuOpen(true)}
-                        className="flex md:hidden items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] cursor-pointer"
-                    >
-                        <span className="text-xs font-medium text-white">{TABS.find(t => t.key === activeTab)?.label}</span>
-                        <Menu className="h-3.5 w-3.5 text-[#71717a]" />
-                    </button>
-
-                    {/* Right controls */}
-                    <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                    {/* Desktop right controls */}
+                    <div className="hidden md:flex items-center gap-2 flex-shrink-0">
                         {cachedAt && (
                             <span className="text-[10px] text-[#3f3f46] hidden lg:inline">
                                 {timeAgo(cachedAt)}
@@ -312,6 +303,14 @@ export default function StravaData() {
                         </button>
                         <AthleteAvatar athlete={data.athlete} onLogout={handleLogout} />
                     </div>
+
+                    {/* Mobile: menu toggle on the right */}
+                    <button
+                        onClick={() => setMobileMenuOpen(true)}
+                        className="flex md:hidden items-center justify-center w-9 h-9 rounded-lg bg-white/[0.04] border border-white/[0.06] cursor-pointer"
+                    >
+                        <Menu className="h-4 w-4 text-[#a1a1aa]" />
+                    </button>
                 </div>
             </header>
 
@@ -334,18 +333,29 @@ export default function StravaData() {
                             transition={{ type: 'spring', stiffness: 350, damping: 30 }}
                             className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[#16161d] border-t border-white/[0.08] rounded-t-2xl"
                         >
-                            <div className="p-5 space-y-5">
+                            <div className="p-5 space-y-4">
                                 {/* Handle bar */}
                                 <div className="w-10 h-1 bg-white/[0.12] rounded-full mx-auto" />
 
-                                {/* Close */}
+                                {/* Profile + sync */}
                                 <div className="flex items-center justify-between">
-                                    <span className="text-sm font-semibold text-white">Navigate</span>
+                                    <div className="flex items-center gap-3">
+                                        <img
+                                            src={data.athlete.profile}
+                                            alt={`${data.athlete.firstname} ${data.athlete.lastname}`}
+                                            className="w-9 h-9 rounded-full"
+                                        />
+                                        <div>
+                                            <p className="text-sm font-semibold text-white">{data.athlete.firstname} {data.athlete.lastname}</p>
+                                            {cachedAt && <p className="text-[10px] text-[#52525b]">Updated {timeAgo(cachedAt)}</p>}
+                                        </div>
+                                    </div>
                                     <button
-                                        onClick={() => setMobileMenuOpen(false)}
-                                        className="w-8 h-8 flex items-center justify-center rounded-lg text-[#52525b] hover:text-white hover:bg-white/[0.06] cursor-pointer"
+                                        onClick={() => { refresh(true); setMobileMenuOpen(false) }}
+                                        disabled={refreshing}
+                                        className="flex items-center justify-center w-9 h-9 rounded-lg text-[#52525b] hover:text-white hover:bg-white/[0.06] disabled:opacity-40 cursor-pointer"
                                     >
-                                        <X className="h-4 w-4" />
+                                        <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
                                     </button>
                                 </div>
 
@@ -383,6 +393,14 @@ export default function StravaData() {
                                         </select>
                                     </div>
                                 )}
+
+                                {/* Sign out */}
+                                <button
+                                    onClick={() => { handleLogout(); setMobileMenuOpen(false) }}
+                                    className="w-full text-left px-4 py-3 rounded-xl text-sm text-[#52525b] hover:text-red-400 hover:bg-white/[0.04] transition-colors cursor-pointer"
+                                >
+                                    Sign out
+                                </button>
                             </div>
                         </motion.div>
                     </>
