@@ -23,8 +23,11 @@ const TABS = [
 
 type TabKey = typeof TABS[number]['key']
 
-const CACHE_KEY = 'strava_dashboard_v3' // bumped to include best_efforts PB data
+const CACHE_KEY = 'strava_dashboard_v3'
+const BEST_EFFORTS_CACHE_KEY = 'strava_best_efforts_v1'
 const REVALIDATE_AFTER = 5 * 60 * 1000 // re-fetch in background if older than 5 min
+const BEST_EFFORTS_BATCH_SIZE = 5
+const BEST_EFFORTS_BATCH_DELAY = 10_000 // 10s between batches to stay under 100 req/15min
 
 interface AthleteStats {
     recent_run_totals: { count: number; distance: number; moving_time: number; elevation_gain: number }
@@ -72,6 +75,19 @@ function writeCache(data: DashboardData) {
 
 function clearCache() {
     try { localStorage.removeItem(CACHE_KEY) } catch { /* ignore */ }
+}
+
+// Separate persistent cache for best_efforts — survives dashboard cache bumps
+function readBestEffortsCache(): Record<number, unknown[]> {
+    try {
+        const raw = localStorage.getItem(BEST_EFFORTS_CACHE_KEY)
+        if (!raw) return {}
+        return JSON.parse(raw) as Record<number, unknown[]>
+    } catch { return {} }
+}
+
+function writeBestEffortsCache(cache: Record<number, unknown[]>) {
+    try { localStorage.setItem(BEST_EFFORTS_CACHE_KEY, JSON.stringify(cache)) } catch { /* ignore */ }
 }
 
 function timeAgo(ms: number): string {
@@ -161,6 +177,94 @@ export default function StravaData() {
                 })
         }
     }, [fetchFromAPI, refresh])
+
+    // Progressively fetch best_efforts for PR activities, caching per-activity
+    useEffect(() => {
+        if (!data) return
+        let cancelled = false
+
+        async function fetchBestEfforts() {
+            const beCache = readBestEffortsCache()
+
+            // Merge any already-cached best_efforts into activities
+            let updated = false
+            const withCached = data!.chartActivities.map(a => {
+                if (!a.best_efforts && beCache[a.id]) {
+                    updated = true
+                    return { ...a, best_efforts: beCache[a.id] as StravaActivity['best_efforts'] }
+                }
+                return a
+            })
+            if (updated) {
+                const newData = { ...data!, chartActivities: withCached }
+                setData(newData)
+                writeCache(newData)
+            }
+
+            // Find PR activities that still need fetching
+            const needFetch = withCached.filter(a => a.pr_count && a.pr_count > 0 && !a.best_efforts && !beCache[a.id])
+            if (needFetch.length === 0) return
+
+            // Fetch in small batches with delays
+            for (let i = 0; i < needFetch.length; i += BEST_EFFORTS_BATCH_SIZE) {
+                if (cancelled) return
+                const batch = needFetch.slice(i, i + BEST_EFFORTS_BATCH_SIZE)
+                const results = await Promise.all(
+                    batch.map(async a => {
+                        try {
+                            const res = await fetch(`/api/strava/activity?id=${a.id}`)
+                            if (res.status === 429) return { id: a.id, efforts: null, rateLimited: true }
+                            if (!res.ok) return { id: a.id, efforts: null, rateLimited: false }
+                            const json = await res.json()
+                            return { id: a.id, efforts: json.best_efforts || [], rateLimited: false }
+                        } catch {
+                            return { id: a.id, efforts: null, rateLimited: false }
+                        }
+                    })
+                )
+
+                // Update cache and state with new results
+                let batchUpdated = false
+                const freshBeCache = readBestEffortsCache()
+                for (const r of results) {
+                    if (r.efforts) {
+                        freshBeCache[r.id] = r.efforts
+                        batchUpdated = true
+                    }
+                }
+                if (batchUpdated) {
+                    writeBestEffortsCache(freshBeCache)
+                    setData(prev => {
+                        if (!prev) return prev
+                        const merged = prev.chartActivities.map(a => {
+                            if (freshBeCache[a.id] && !a.best_efforts) {
+                                return { ...a, best_efforts: freshBeCache[a.id] as StravaActivity['best_efforts'] }
+                            }
+                            return a
+                        })
+                        const newData = { ...prev, chartActivities: merged }
+                        writeCache(newData)
+                        return newData
+                    })
+                }
+
+                // Stop if we hit a rate limit
+                if (results.some(r => r.rateLimited)) {
+                    console.warn('Strava rate limited — pausing best_efforts fetch')
+                    return
+                }
+
+                // Wait between batches to avoid rate limiting
+                if (i + BEST_EFFORTS_BATCH_SIZE < needFetch.length) {
+                    await new Promise(r => setTimeout(r, BEST_EFFORTS_BATCH_DELAY))
+                }
+            }
+        }
+
+        fetchBestEfforts()
+        return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [data?.chartActivities?.length])
 
     const handleLogout = async () => {
         try {
