@@ -7,7 +7,7 @@ import { StravaActivity } from "@/types/strava"
 import { decodePolyline } from '@/lib/polyline'
 import { AnimatedNumber } from './AnimatedNumber'
 import { SpotlightCard } from './SpotlightCard'
-import { Trophy } from 'lucide-react'
+import { Trophy, Medal } from 'lucide-react'
 
 interface ChartComponentProps {
     activities: StravaActivity[]
@@ -23,6 +23,30 @@ interface ChartEntry {
     isRace: boolean
     raceDistance: number | null
     polyline: [number, number][] | null
+    pbMarkers?: PBMarker[]
+    pbDistance?: number | null
+}
+
+interface PBMarker {
+    distanceName: string
+    displayName: string
+    prRank: number
+    movingTime: number
+    effortDistance: number
+    activityName: string
+    fullDate: string
+    polyline: [number, number][] | null
+}
+
+const PB_DISTANCES = ['1K', '5K', '10K', 'Half-Marathon', 'Marathon', '50K'] as const
+const PB_DISPLAY_NAMES: Record<string, string> = {
+    '1K': '1K', '5K': '5K', '10K': '10K',
+    'Half-Marathon': 'Half Marathon', 'Marathon': 'Marathon', '50K': '50K',
+}
+const PB_RANK_COLORS: Record<number, { fill: string; stroke: string; glow: string }> = {
+    1: { fill: '#fbbf24', stroke: '#fcd34d', glow: 'rgba(251,191,36,0.15)' },
+    2: { fill: '#9ca3af', stroke: '#d1d5db', glow: 'rgba(156,163,175,0.15)' },
+    3: { fill: '#d97706', stroke: '#f59e0b', glow: 'rgba(217,119,6,0.15)' },
 }
 
 function formatPace(seconds: number, meters: number): string {
@@ -122,6 +146,43 @@ function RacePopup({ entry }: { entry: ChartEntry }) {
     )
 }
 
+function PBPopup({ marker }: { marker: PBMarker }) {
+    const colors = PB_RANK_COLORS[marker.prRank] || PB_RANK_COLORS[1]
+    const rankLabel = marker.prRank === 1 ? '1st' : marker.prRank === 2 ? '2nd' : '3rd'
+
+    return (
+        <div className="bg-[#1c1c26]/95 backdrop-blur-sm border rounded-xl px-4 py-3 shadow-2xl text-sm min-w-[200px]"
+            style={{ borderColor: `${colors.fill}33` }}>
+            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/[0.06]">
+                <div className="flex items-center justify-center w-6 h-6 rounded-md" style={{ backgroundColor: `${colors.fill}33` }}>
+                    <Medal className="h-3.5 w-3.5" style={{ color: colors.fill }} />
+                </div>
+                <div className="min-w-0">
+                    <p className="font-semibold text-xs uppercase tracking-wide" style={{ color: colors.fill }}>{rankLabel} Best</p>
+                    <p className="text-white font-semibold text-sm leading-tight">{marker.displayName}</p>
+                </div>
+            </div>
+            <p className="text-[#52525b] text-[10px] mb-2">{marker.fullDate}</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <div>
+                    <p className="text-[#52525b] text-[9px] uppercase tracking-wide">Time</p>
+                    <p className="text-white text-sm font-bold tabular-nums">{formatDuration(marker.movingTime)}</p>
+                </div>
+                <div>
+                    <p className="text-[#52525b] text-[9px] uppercase tracking-wide">Pace</p>
+                    <p className="text-white text-sm font-bold tabular-nums">{formatPace(marker.movingTime, marker.effortDistance)} /km</p>
+                </div>
+            </div>
+            <p className="text-[#52525b] text-[10px] mt-2 truncate max-w-[200px]">{marker.activityName}</p>
+            {marker.polyline && marker.polyline.length > 1 && (
+                <div className="mt-2 flex justify-center">
+                    <MiniRoute points={marker.polyline} />
+                </div>
+            )}
+        </div>
+    )
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomTooltip({ active, payload }: any) {
     if (!active || !payload?.length) return null
@@ -142,6 +203,8 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
     const [showRaces, setShowRaces] = React.useState(true)
     const [hoveredRace, setHoveredRace] = React.useState<{ entry: ChartEntry; x: number; y: number } | null>(null)
     const chartWrapperRef = React.useRef<HTMLDivElement>(null)
+    const [showPBs, setShowPBs] = React.useState(true)
+    const [hoveredPB, setHoveredPB] = React.useState<{ marker: PBMarker; x: number; y: number } | null>(null)
 
     const [selectedYear, setSelectedYear] = React.useState<number | null>(null)
 
@@ -239,10 +302,52 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
         return entries
     }, [activities, selectedYear])
 
+    const chartDataWithPBs = React.useMemo(() => {
+        const pbByFullDate = new Map<string, PBMarker[]>()
+
+        for (const activity of activities) {
+            if (!activity.best_efforts) continue
+            for (const effort of activity.best_efforts) {
+                if (!PB_DISTANCES.includes(effort.name as typeof PB_DISTANCES[number])) continue
+                if (!effort.pr_rank || effort.pr_rank > 3) continue
+
+                const fullDate = new Date(activity.start_date_local).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+
+                const marker: PBMarker = {
+                    distanceName: effort.name,
+                    displayName: PB_DISPLAY_NAMES[effort.name] || effort.name,
+                    prRank: effort.pr_rank,
+                    movingTime: effort.moving_time,
+                    effortDistance: effort.distance,
+                    activityName: activity.name,
+                    fullDate,
+                    polyline: activity.map?.summary_polyline
+                        ? decodePolyline(activity.map.summary_polyline)
+                        : null,
+                }
+
+                if (!pbByFullDate.has(fullDate)) pbByFullDate.set(fullDate, [])
+                pbByFullDate.get(fullDate)!.push(marker)
+            }
+        }
+
+        return chartData.map(entry => {
+            const markers = pbByFullDate.get(entry.fullDate)
+            if (markers && markers.length > 0) {
+                return { ...entry, pbMarkers: markers, pbDistance: entry.distance || 0.1 }
+            }
+            return { ...entry, pbMarkers: undefined, pbDistance: null }
+        })
+    }, [chartData, activities])
+
+    const pbTotal = React.useMemo(() =>
+        chartDataWithPBs.filter(d => d.pbMarkers && d.pbMarkers.length > 0).length
+    , [chartDataWithPBs])
+
     const total = React.useMemo(() => ({
-        distance: chartData.reduce((acc, curr) => acc + curr.distance, 0),
-        races: chartData.filter(d => d.isRace).length,
-    }), [chartData])
+        distance: chartDataWithPBs.reduce((acc, curr) => acc + curr.distance, 0),
+        races: chartDataWithPBs.filter(d => d.isRace).length,
+    }), [chartDataWithPBs])
 
     if (!activities || activities.length === 0) {
         return (
@@ -298,11 +403,25 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
                             <span className="text-[10px] opacity-70">{total.races}</span>
                         </button>
                     )}
+                    {pbTotal > 0 && (
+                        <button
+                            onClick={() => setShowPBs(!showPBs)}
+                            className={`text-xs px-3 py-2 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                                showPBs
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+                                    : 'bg-white/[0.04] border-white/[0.08] text-[#71717a] hover:text-white hover:border-white/[0.12]'
+                            }`}
+                        >
+                            <Medal className="h-3 w-3" />
+                            <span className="hidden sm:inline">PBs</span>
+                            <span className="text-[10px] opacity-70">{pbTotal}</span>
+                        </button>
+                    )}
                 </div>
             </div>
             <div className="flex-1 px-0 sm:px-4 py-2 sm:py-4 min-h-0 relative" ref={chartWrapperRef}>
                 <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={chartData} margin={{ top: 16, right: 4, left: -20, bottom: 4 }}>
+                    <ComposedChart data={chartDataWithPBs} margin={{ top: 16, right: 4, left: -20, bottom: 4 }}>
                         <defs>
                             <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#FC4C02" stopOpacity={1} />
@@ -316,7 +435,7 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
                             tick={{ fill: '#52525b', fontSize: 10 }}
                             tickLine={false}
                             axisLine={false}
-                            interval={selectedYear !== null ? undefined : Math.max(0, Math.floor(chartData.length / 8) - 1)}
+                            interval={selectedYear !== null ? undefined : Math.max(0, Math.floor(chartDataWithPBs.length / 8) - 1)}
                             angle={selectedYear !== null ? 0 : -35}
                             textAnchor={selectedYear !== null ? 'middle' : 'end'}
                             height={selectedYear !== null ? 30 : 50}
@@ -324,8 +443,8 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
                         />
                         <YAxis stroke="transparent" tick={{ fill: '#52525b', fontSize: 11 }} tickLine={false} axisLine={false} />
                         <Tooltip
-                            content={hoveredRace ? () => null : <CustomTooltip />}
-                            cursor={hoveredRace ? false : { fill: 'rgba(252,76,2,0.04)' }}
+                            content={hoveredRace || hoveredPB ? () => null : <CustomTooltip />}
+                            cursor={hoveredRace || hoveredPB ? false : { fill: 'rgba(252,76,2,0.04)' }}
                             allowEscapeViewBox={{ x: true, y: true }}
                             offset={20}
                         />
@@ -373,8 +492,48 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
                                     )
                                 }}
                             >
-                                {chartData.map((entry, i) => (
+                                {chartDataWithPBs.map((entry, i) => (
                                     <Cell key={i} fill={entry.isRace ? '#f59e0b' : 'transparent'} />
+                                ))}
+                            </Scatter>
+                        )}
+                        {showPBs && (
+                            <Scatter
+                                dataKey="pbDistance"
+                                name="PB"
+                                shape={(props: { cx?: number; cy?: number; payload?: ChartEntry }) => {
+                                    if (!props.payload?.pbMarkers || !props.cx || !props.cy) return null
+                                    const markers = props.payload.pbMarkers
+                                    const best = markers.reduce((a, b) => a.prRank <= b.prRank ? a : b)
+                                    const colors = PB_RANK_COLORS[best.prRank] || PB_RANK_COLORS[1]
+                                    const yOffset = props.payload.isRace ? -28 : -10
+
+                                    return (
+                                        <g
+                                            style={{ cursor: 'pointer' }}
+                                            onMouseEnter={(e) => {
+                                                const rect = chartWrapperRef.current?.getBoundingClientRect()
+                                                if (!rect) return
+                                                setHoveredPB({
+                                                    marker: best,
+                                                    x: e.clientX - rect.left,
+                                                    y: e.clientY - rect.top,
+                                                })
+                                            }}
+                                            onMouseLeave={() => setHoveredPB(null)}
+                                        >
+                                            <circle cx={props.cx} cy={props.cy + yOffset} r={16} fill="transparent" />
+                                            <circle cx={props.cx} cy={props.cy + yOffset} r={10} fill={colors.fill} fillOpacity={0.15} />
+                                            <circle cx={props.cx} cy={props.cy + yOffset} r={7} fill={colors.fill} stroke={colors.stroke} strokeWidth={1.5} />
+                                            <g transform={`translate(${props.cx - 4.5}, ${props.cy + yOffset - 4.5}) scale(0.375)`}>
+                                                <path d="M12 2L9 9H2l5.5 4-2 7L12 16l6.5 4-2-7L22 9h-7L12 2z" fill="#1c1c26" />
+                                            </g>
+                                        </g>
+                                    )
+                                }}
+                            >
+                                {chartDataWithPBs.map((entry, i) => (
+                                    <Cell key={i} fill={entry.pbMarkers ? PB_RANK_COLORS[entry.pbMarkers[0]?.prRank || 1].fill : 'transparent'} />
                                 ))}
                             </Scatter>
                         )}
@@ -392,6 +551,20 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
                     return (
                         <div className="absolute z-50 pointer-events-none" style={{ left, top }}>
                             <RacePopup entry={hoveredRace.entry} />
+                        </div>
+                    )
+                })()}
+                {hoveredPB && chartWrapperRef.current && (() => {
+                    const rect = chartWrapperRef.current!.getBoundingClientRect()
+                    const popupH = 280
+                    const popupW = 230
+                    const spaceBelow = rect.height - hoveredPB.y
+                    const spaceRight = rect.width - hoveredPB.x
+                    const top = spaceBelow < popupH ? hoveredPB.y - popupH + 20 : hoveredPB.y - 40
+                    const left = spaceRight < popupW + 20 ? hoveredPB.x - popupW - 8 : hoveredPB.x + 16
+                    return (
+                        <div className="absolute z-50 pointer-events-none" style={{ left, top }}>
+                            <PBPopup marker={hoveredPB.marker} />
                         </div>
                     )
                 })()}
