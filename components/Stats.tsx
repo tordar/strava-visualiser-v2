@@ -7,6 +7,7 @@ import { Activity, Award, Zap } from 'lucide-react'
 import { AnimatedNumber } from './AnimatedNumber'
 import { SpotlightCard } from './SpotlightCard'
 import { StravaActivity } from '@/types/strava'
+import { PBStats } from './PBStats'
 
 interface StatsProps {
     activities: StravaActivity[]
@@ -187,6 +188,7 @@ export function Stats({ activities, sportFilter, sportTypes, sportCounts, onSpor
                 <GoalService ytdDistance={ytd.distance} />
             </motion.div>
         </div>
+            <PBStats activities={activities} />
         </div>
     )
 }
