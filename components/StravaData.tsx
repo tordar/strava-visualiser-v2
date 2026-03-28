@@ -406,7 +406,7 @@ export default function StravaData() {
                     </>
                 )}
             </AnimatePresence>
-            <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 relative z-10">
+            <main className="max-w-7xl mx-auto px-0 sm:px-6 py-0 sm:py-6 relative z-10">
                 {activeTab === 'stats' && (
                     <Stats
                         activities={data.chartActivities}
@@ -417,22 +417,22 @@ export default function StravaData() {
                     />
                 )}
                 {activeTab === 'activities' && (
-                    <div className="h-[calc(100vh-7rem)] sm:h-[calc(100vh-8rem)]">
+                    <div className="h-[calc(100vh-3rem)] sm:h-[calc(100vh-8rem)]">
                         <ActivitiesTable activities={filteredActivities} />
                     </div>
                 )}
                 {activeTab === 'chart' && (
-                    <div className="h-[calc(100vh-7rem)] sm:h-[calc(100vh-8rem)]">
+                    <div className="h-[calc(100vh-3rem)] sm:h-[calc(100vh-8rem)]">
                         <ChartComponent activities={filteredActivities} />
                     </div>
                 )}
                 {activeTab === 'yearly' && (
-                    <div className="h-[calc(100vh-7rem)] sm:h-[calc(100vh-8rem)]">
+                    <div className="h-[calc(100vh-3rem)] sm:h-[calc(100vh-8rem)]">
                         <YearlyProgressChart activities={filteredActivities} />
                     </div>
                 )}
                 {activeTab === 'heatmap' && (
-                    <div className="h-[calc(100vh-7rem)] sm:h-[calc(100vh-8rem)]">
+                    <div className="h-[calc(100vh-3rem)] sm:h-[calc(100vh-8rem)]">
                         <HeatmapTab activities={filteredActivities} />
                     </div>
                 )}

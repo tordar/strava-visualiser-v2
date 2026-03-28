@@ -112,7 +112,7 @@ export function Stats({ activities, sportFilter, sportTypes, sportCounts, onSpor
     const label = sportFilter === 'all' ? 'Activities' : sportFilter + 's'
 
     return (
-        <div className="space-y-5">
+        <div className="space-y-5 px-3 sm:px-0 pt-2 sm:pt-0">
             {/* Sport filter */}
             {sportTypes.length > 1 && (
                 <div className="flex items-center gap-3">

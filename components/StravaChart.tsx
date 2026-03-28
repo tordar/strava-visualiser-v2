@@ -185,7 +185,7 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
             transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
             className="h-full"
         >
-        <SpotlightCard className="rounded-xl bg-[#16161d] border border-white/[0.06] overflow-hidden h-full flex flex-col card-glow" spotlightSize={350}>
+        <SpotlightCard className="rounded-xl bg-[#16161d] border border-white/[0.06] overflow-hidden h-full flex flex-col card-glow mobile-flush" spotlightSize={350}>
             <div className="h-0.5 w-full bg-gradient-to-r from-[#FC4C02] to-amber-400" />
             <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-white/[0.06] flex items-center justify-between flex-shrink-0 gap-2">
                 <div className="min-w-0">

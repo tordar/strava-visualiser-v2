@@ -403,7 +403,7 @@ export default function HeatmapContent({ activities }: HeatmapContentProps) {
             className={`${isFullscreen ? 'h-screen' : 'h-full'}`}
             style={isFullscreen ? { background: '#0c0c10' } : undefined}
         >
-            <SpotlightCard className={`rounded-xl bg-[#16161d] border border-white/[0.06] overflow-hidden h-full flex flex-col ${isFullscreen ? '' : 'card-glow'}`} spotlightSize={350}>
+            <SpotlightCard className={`rounded-xl bg-[#16161d] border border-white/[0.06] overflow-hidden h-full flex flex-col mobile-flush ${isFullscreen ? '' : 'card-glow'}`} spotlightSize={350}>
                 {!isFullscreen && <div className="h-0.5 w-full bg-gradient-to-r from-[#FC4C02] to-amber-400" />}
                 <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-white/[0.06] flex items-center justify-between flex-shrink-0">
                     <div>
