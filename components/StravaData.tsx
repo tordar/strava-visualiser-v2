@@ -11,6 +11,7 @@ import HeatmapTab from "@/components/HeatmapTab"
 import ActivitiesTable from "@/components/ActivitiesTable"
 import { RefreshCw, Menu } from 'lucide-react'
 import { AuroraBlobs } from './AuroraBlobs'
+import { StravaActivity } from '@/types/strava'
 
 const TABS = [
     { key: 'stats', label: 'Stats' },
@@ -22,25 +23,8 @@ const TABS = [
 
 type TabKey = typeof TABS[number]['key']
 
-const CACHE_KEY = 'strava_dashboard_v2' // bumped to invalidate old 1000-activity cache
+const CACHE_KEY = 'strava_dashboard_v3' // bumped to include best_efforts PB data
 const REVALIDATE_AFTER = 5 * 60 * 1000 // re-fetch in background if older than 5 min
-
-interface StravaActivity {
-    id: number
-    name: string
-    type: string
-    distance: number
-    moving_time: number
-    total_elevation_gain: number
-    start_date_local: string
-    start_latlng: [number, number] | null
-    workout_type?: number | null
-    map?: {
-        id: string
-        summary_polyline: string | null
-        resource_state: number
-    }
-}
 
 interface AthleteStats {
     recent_run_totals: { count: number; distance: number; moving_time: number; elevation_gain: number }
