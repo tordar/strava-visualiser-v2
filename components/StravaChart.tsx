@@ -215,9 +215,9 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
                     )}
                 </div>
             </div>
-            <div className="flex-1 px-2 sm:px-4 py-4 min-h-0 relative" ref={chartWrapperRef}>
+            <div className="flex-1 px-0 sm:px-4 py-2 sm:py-4 min-h-0 relative" ref={chartWrapperRef}>
                 <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={chartData} margin={{ top: 16, right: 4, left: -10, bottom: 4 }}>
+                    <ComposedChart data={chartData} margin={{ top: 16, right: 4, left: -20, bottom: 4 }}>
                         <defs>
                             <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#FC4C02" stopOpacity={1} />

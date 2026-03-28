@@ -139,9 +139,9 @@ export default function YearlyProgressChart({ activities }: YearlyProgressChartP
                     </div>
                 </div>
             </div>
-            <div className="flex-1 px-4 py-4 min-h-0">
+            <div className="flex-1 px-0 sm:px-4 py-2 sm:py-4 min-h-0">
                 <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData} margin={{ top: 4, right: 4, left: -10, bottom: 4 }}>
+                    <LineChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 4 }}>
                         <XAxis dataKey="date" stroke="transparent" tick={{ fill: '#52525b', fontSize: 11 }} tickLine={false} axisLine={false} />
                         <YAxis stroke="transparent" tick={{ fill: '#52525b', fontSize: 11 }} tickLine={false} axisLine={false} />
                         <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.06)', strokeWidth: 1 }} />
