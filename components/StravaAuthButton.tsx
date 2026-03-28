@@ -1,7 +1,5 @@
 'use client'
 
-import { Button } from "@/components/ui/button"
-
 export default function StravaAuthButton() {
     const handleAuth = () => {
         window.location.href = '/api/strava/auth'

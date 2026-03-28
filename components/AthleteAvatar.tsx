@@ -5,7 +5,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
-import { LogOut, User } from "lucide-react"
+import { LogOut } from "lucide-react"
 
 interface Athlete {
     id: number

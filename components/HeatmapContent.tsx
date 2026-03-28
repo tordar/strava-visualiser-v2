@@ -227,8 +227,9 @@ function PolylineManager({
 
     // Full reset: when activities array changes, clear everything
     useEffect(() => {
+        const lg = layerGroupRef.current
         return () => {
-            layerGroupRef.current.clearLayers()
+            lg.clearLayers()
             polylinesRef.current = []
             prevIndexRef.current = -1
         }
