@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { ChevronUp, ChevronDown, Search, Trophy, ChevronsUpDown } from 'lucide-react'
 import { StravaActivity } from '@/types/strava'
@@ -40,14 +40,9 @@ function formatDateShort(iso: string): string {
 
 export default function ActivitiesTable({ activities }: ActivitiesTableProps) {
     const [search, setSearch] = useState('')
-    const [sportFilter, setSportFilter] = useState<string>('all')
     const [sortKey, setSortKey] = useState<SortKey>('date')
     const [sortDir, setSortDir] = useState<SortDir>('desc')
     const [page, setPage] = useState(1)
-
-    const sportTypes = useMemo(() =>
-        Array.from(new Set(activities.map(a => a.type))).sort()
-    , [activities])
 
     const handleSort = (key: SortKey) => {
         if (sortKey === key) {
@@ -59,24 +54,15 @@ export default function ActivitiesTable({ activities }: ActivitiesTableProps) {
         setPage(1)
     }
 
-    const handleSportFilter = useCallback((type: string) => {
-        setSportFilter(type)
-        setPage(1)
-    }, [])
-
     const filtered = useMemo(() => {
-        let result = activities
-        if (sportFilter !== 'all') result = result.filter(a => a.type === sportFilter)
-        if (search) {
-            const q = search.toLowerCase()
-            result = result.filter(a =>
-                a.name.toLowerCase().includes(q) ||
-                a.type.toLowerCase().includes(q) ||
-                formatDate(a.start_date_local).toLowerCase().includes(q)
-            )
-        }
-        return result
-    }, [activities, sportFilter, search])
+        if (!search) return activities
+        const q = search.toLowerCase()
+        return activities.filter(a =>
+            a.name.toLowerCase().includes(q) ||
+            a.type.toLowerCase().includes(q) ||
+            formatDate(a.start_date_local).toLowerCase().includes(q)
+        )
+    }, [activities, search])
 
     const sorted = useMemo(() => {
         return [...filtered].sort((a, b) => {
@@ -139,50 +125,21 @@ export default function ActivitiesTable({ activities }: ActivitiesTableProps) {
             <div className="h-0.5 w-full bg-gradient-to-r from-[#FC4C02] to-amber-400" />
 
             {/* Header */}
-            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-white/[0.06] flex-shrink-0 space-y-2.5">
-                <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                        <h2 className="text-sm font-semibold text-white">Activities</h2>
-                        <p className="text-xs text-[#52525b] mt-0.5">{filtered.length} of {activities.length}</p>
-                    </div>
-                    <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#52525b]" />
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={e => { setSearch(e.target.value); setPage(1) }}
-                            placeholder="Search..."
-                            className="bg-white/[0.04] border border-white/[0.08] rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-[#3f3f46] outline-none focus:border-[#FC4C02]/30 w-40 sm:w-56 transition-colors"
-                        />
-                    </div>
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-white/[0.06] flex items-center justify-between gap-3 flex-shrink-0">
+                <div className="min-w-0">
+                    <h2 className="text-sm font-semibold text-white">Activities</h2>
+                    <p className="text-xs text-[#52525b] mt-0.5">{filtered.length} activities</p>
                 </div>
-                {sportTypes.length > 1 && (
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-                        <button
-                            onClick={() => handleSportFilter('all')}
-                            className={`text-[10px] sm:text-xs px-2.5 py-1 rounded-md border transition-all cursor-pointer flex-shrink-0 ${
-                                sportFilter === 'all'
-                                    ? 'bg-[#FC4C02]/10 text-[#FC4C02] border-[#FC4C02]/30'
-                                    : 'text-[#52525b] hover:text-[#a1a1aa] border-white/[0.06]'
-                            }`}
-                        >
-                            All
-                        </button>
-                        {sportTypes.map(type => (
-                            <button
-                                key={type}
-                                onClick={() => handleSportFilter(type)}
-                                className={`text-[10px] sm:text-xs px-2.5 py-1 rounded-md border transition-all cursor-pointer flex-shrink-0 ${
-                                    sportFilter === type
-                                        ? 'bg-[#FC4C02]/10 text-[#FC4C02] border-[#FC4C02]/30'
-                                        : 'text-[#52525b] hover:text-[#a1a1aa] border-white/[0.06]'
-                                }`}
-                            >
-                                {type}
-                            </button>
-                        ))}
-                    </div>
-                )}
+                <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#52525b]" />
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={e => { setSearch(e.target.value); setPage(1) }}
+                        placeholder="Search..."
+                        className="bg-white/[0.04] border border-white/[0.08] rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-[#3f3f46] outline-none focus:border-[#FC4C02]/30 w-40 sm:w-56 transition-colors"
+                    />
+                </div>
             </div>
 
             {/* Table */}

@@ -305,58 +305,32 @@ export default function StravaData() {
                 </div>
             </header>
             <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 relative z-10">
-                {/* Sport filter — shown on chart, yearly, and heatmap tabs */}
-                {activeTab !== 'stats' && activeTab !== 'activities' && sportTypes.length > 1 && (
-                    <div className="flex items-center gap-1.5 mb-3 sm:mb-4 overflow-x-auto pb-1">
-                        <button
-                            onClick={() => setSportFilter('all')}
-                            className={`text-xs px-3 py-1.5 rounded-lg border transition-all cursor-pointer flex-shrink-0 ${
-                                sportFilter === 'all'
-                                    ? 'bg-[#FC4C02]/10 text-[#FC4C02] border-[#FC4C02]/30'
-                                    : 'text-[#52525b] hover:text-[#a1a1aa] border-white/[0.06] hover:border-white/[0.1]'
-                            }`}
-                        >
-                            All ({data.chartActivities.length})
-                        </button>
-                        {sportTypes.map(type => {
-                            const count = sportCounts[type] || 0
-                            return (
-                                <button
-                                    key={type}
-                                    onClick={() => setSportFilter(type)}
-                                    className={`text-xs px-3 py-1.5 rounded-lg border transition-all cursor-pointer flex-shrink-0 ${
-                                        sportFilter === type
-                                            ? 'bg-[#FC4C02]/10 text-[#FC4C02] border-[#FC4C02]/30'
-                                            : 'text-[#52525b] hover:text-[#a1a1aa] border-white/[0.06] hover:border-white/[0.1]'
-                                    }`}
-                                >
-                                    {type} ({count})
-                                </button>
-                            )
-                        })}
-                    </div>
-                )}
-
                 {activeTab === 'stats' && (
-                    <Stats athleteStats={data.athleteStats} formatDistance={formatDistance} formatDuration={formatDuration} />
+                    <Stats
+                        activities={data.chartActivities}
+                        sportFilter={sportFilter}
+                        sportTypes={sportTypes}
+                        sportCounts={sportCounts}
+                        onSportFilterChange={setSportFilter}
+                    />
                 )}
                 {activeTab === 'activities' && (
                     <div className="h-[calc(100vh-7rem)] sm:h-[calc(100vh-8rem)]">
-                        <ActivitiesTable activities={data.chartActivities} />
+                        <ActivitiesTable activities={filteredActivities} />
                     </div>
                 )}
                 {activeTab === 'chart' && (
-                    <div className="h-[calc(100vh-10rem)] sm:h-[calc(100vh-11rem)]">
+                    <div className="h-[calc(100vh-7rem)] sm:h-[calc(100vh-8rem)]">
                         <ChartComponent activities={filteredActivities} />
                     </div>
                 )}
                 {activeTab === 'yearly' && (
-                    <div className="h-[calc(100vh-10rem)] sm:h-[calc(100vh-11rem)]">
+                    <div className="h-[calc(100vh-7rem)] sm:h-[calc(100vh-8rem)]">
                         <YearlyProgressChart activities={filteredActivities} />
                     </div>
                 )}
                 {activeTab === 'heatmap' && (
-                    <div className="h-[calc(100vh-10rem)] sm:h-[calc(100vh-11rem)]">
+                    <div className="h-[calc(100vh-7rem)] sm:h-[calc(100vh-8rem)]">
                         <HeatmapTab activities={filteredActivities} />
                     </div>
                 )}

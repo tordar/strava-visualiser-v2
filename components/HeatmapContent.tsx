@@ -241,7 +241,7 @@ function PolylineManager({
 // --- Main component ---
 
 export default function HeatmapContent({ activities }: HeatmapContentProps) {
-    const [currentIndex, setCurrentIndex] = useState(0)
+    const [currentIndex, setCurrentIndex] = useState(-1) // -1 = not initialized yet
     const [isPlaying, setIsPlaying] = useState(false)
     const [speed, setSpeed] = useState(1)
     const [followMode, setFollowMode] = useState(true)
@@ -283,10 +283,37 @@ export default function HeatmapContent({ activities }: HeatmapContentProps) {
             }))
     }, [activities])
 
+    // When activities change (or sport filter), show all routes by default
+    useEffect(() => {
+        if (decodedActivities.length > 0) {
+            setCurrentIndex(decodedActivities.length - 1)
+            setIsPlaying(false)
+        }
+    }, [decodedActivities])
+
+    // Smart bounds: find the densest cluster of start points for initial view
     const bounds = useMemo(() => {
-        const allPoints = decodedActivities.flatMap(a => a.positions) as L.LatLngTuple[]
-        if (allPoints.length === 0) return null
-        return L.latLngBounds(allPoints)
+        const starts = decodedActivities
+            .map(a => a.positions[0] as [number, number] | undefined)
+            .filter((p): p is [number, number] => !!p)
+        if (starts.length === 0) return null
+
+        // Use the median lat/lng as the center, then build bounds around
+        // the middle 80% of points to ignore outlier trips
+        const sortedLats = starts.map(p => p[0]).sort((a, b) => a - b)
+        const sortedLngs = starts.map(p => p[1]).sort((a, b) => a - b)
+        const trim = Math.floor(starts.length * 0.1)
+        const coreLats = sortedLats.slice(trim, sortedLats.length - trim)
+        const coreLngs = sortedLngs.slice(trim, sortedLngs.length - trim)
+
+        if (coreLats.length === 0 || coreLngs.length === 0) {
+            return L.latLngBounds(starts.map(p => L.latLng(p[0], p[1])))
+        }
+
+        return L.latLngBounds(
+            L.latLng(coreLats[0], coreLngs[0]),
+            L.latLng(coreLats[coreLats.length - 1], coreLngs[coreLngs.length - 1])
+        )
     }, [decodedActivities])
 
     // Called by FollowActivity when the map flies to a new location

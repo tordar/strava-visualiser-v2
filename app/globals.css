@@ -123,6 +123,12 @@ body {
 }
 .heatmap-tooltip .leaflet-tooltip-tip { display: none; }
 
+/* Dark select options */
+select option {
+  background-color: #16161d;
+  color: #f4f4f5;
+}
+
 /* Recharts: lift scatter (race markers) above bars */
 .recharts-scatter { pointer-events: all; }
 .recharts-scatter .recharts-scatter-symbol { pointer-events: all; }
