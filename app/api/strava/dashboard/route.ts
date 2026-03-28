@@ -35,12 +35,22 @@ async function getValidAccessToken(): Promise<string | null> {
     return data.access_token
 }
 
-async function stravaGet(accessToken: string, path: string) {
-    const res = await fetch(`https://www.strava.com/api/v3/${path}`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-    })
-    if (!res.ok) throw new Error(`Strava ${path} → ${res.status}`)
-    return res.json()
+async function stravaGet(accessToken: string, path: string, retries = 3) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        const res = await fetch(`https://www.strava.com/api/v3/${path}`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        if (res.status === 429) {
+            if (attempt === retries) throw new Error(`Strava ${path} → 429 (rate limited after ${retries} retries)`)
+            const retryAfter = parseInt(res.headers.get('retry-after') || '', 10)
+            const wait = retryAfter > 0 ? retryAfter * 1000 : Math.min(15000, 2000 * 2 ** attempt)
+            console.warn(`Strava rate limited on ${path}, waiting ${Math.round(wait / 1000)}s (attempt ${attempt + 1}/${retries})`)
+            await new Promise(r => setTimeout(r, wait))
+            continue
+        }
+        if (!res.ok) throw new Error(`Strava ${path} → ${res.status}`)
+        return res.json()
+    }
 }
 
 export async function GET() {
