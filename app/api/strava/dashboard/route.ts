@@ -78,8 +78,36 @@ export async function GET() {
             }
         }
 
+        // Fetch details for activities with PRs to get best_efforts
+        const prActivities = activities.filter((a: { pr_count?: number }) => a.pr_count && a.pr_count > 0)
+        const prDetailsMap = new Map<number, { best_efforts: unknown[] }>()
+
+        // Batch detail fetches in groups of 5
+        for (let i = 0; i < prActivities.length; i += 5) {
+            const batch = prActivities.slice(i, i + 5)
+            const details = await Promise.all(
+                batch.map((a: { id: number }) =>
+                    stravaGet(accessToken, `activities/${a.id}`).catch(() => null)
+                )
+            )
+            for (const detail of details) {
+                if (detail?.id && detail.best_efforts) {
+                    prDetailsMap.set(detail.id, { best_efforts: detail.best_efforts })
+                }
+            }
+        }
+
+        // Merge best_efforts into activities
+        const enrichedActivities = activities.map((a: { id: number; pr_count?: number }) => {
+            const detail = prDetailsMap.get(a.id)
+            if (detail) {
+                return { ...a, best_efforts: detail.best_efforts }
+            }
+            return a
+        })
+
         const athleteStats = await stravaGet(accessToken, `athletes/${athlete.id}/stats`)
-        return NextResponse.json({ athlete, athleteStats, activities })
+        return NextResponse.json({ athlete, athleteStats, activities: enrichedActivities })
 
     } catch (error) {
         console.error('Dashboard fetch error:', error)
