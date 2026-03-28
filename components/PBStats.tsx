@@ -208,22 +208,30 @@ export function PBStats({ activities }: { activities: StravaActivity[] }) {
                 prRank: e.effort.pr_rank || 0,
             }))
 
-            const prOnes = efforts
-                .filter(e => e.effort.pr_rank === 1)
-                .sort((a, b) => new Date(a.activity.start_date_local).getTime() - new Date(b.activity.start_date_local).getTime())
-                .map(e => ({
-                    movingTime: e.effort.moving_time,
-                    distance: e.effort.distance,
-                    date: e.effort.start_date_local || e.activity.start_date_local,
-                    activityName: e.activity.name,
-                    prRank: 1,
-                }))
+            // Compute progression: walk chronologically, track each new best
+            const chronological = [...efforts].sort((a, b) =>
+                new Date(a.activity.start_date_local).getTime() - new Date(b.activity.start_date_local).getTime()
+            )
+            const progression: PBRecord[] = []
+            let bestTime = Infinity
+            for (const e of chronological) {
+                if (e.effort.moving_time < bestTime) {
+                    bestTime = e.effort.moving_time
+                    progression.push({
+                        movingTime: e.effort.moving_time,
+                        distance: e.effort.distance,
+                        date: e.effort.start_date_local || e.activity.start_date_local,
+                        activityName: e.activity.name,
+                        prRank: 1,
+                    })
+                }
+            }
 
             results.push({
                 distanceName: distName,
                 displayName: PB_DISPLAY_NAMES[distName] || distName,
                 currentBest: top3[0],
-                progression: prOnes.length > 0 ? prOnes : [top3[0]],
+                progression: progression.length > 0 ? progression : [top3[0]],
                 top3,
             })
         }
