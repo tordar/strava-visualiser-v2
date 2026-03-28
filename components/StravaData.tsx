@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import ChartComponent from "@/components/StravaChart"
@@ -8,11 +8,13 @@ import { Stats } from "@/components/Stats"
 import { AthleteAvatar } from "@/components/AthleteAvatar"
 import YearlyProgressChart from "@/components/YearlyProgressChart"
 import HeatmapTab from "@/components/HeatmapTab"
+import ActivitiesTable from "@/components/ActivitiesTable"
 import { RefreshCw } from 'lucide-react'
 import { AuroraBlobs } from './AuroraBlobs'
 
 const TABS = [
     { key: 'stats', label: 'Stats' },
+    { key: 'activities', label: 'Activities' },
     { key: 'chart', label: 'Chart' },
     { key: 'yearly', label: 'Yearly' },
     { key: 'heatmap', label: 'Heatmap' },
@@ -95,6 +97,23 @@ function timeAgo(ms: number): string {
     return `${Math.floor(s / 3600)}h ago`
 }
 
+function formatDuration(seconds: number): string {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    return `${hours}h ${minutes}m`
+}
+
+function formatDistance(distance: number): string {
+    const km = distance / 1000
+    return `${new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(km)} km`
+}
+
+const StravaLogo = () => (
+    <svg viewBox="0 0 24 24" className="w-5 h-5 fill-[#FC4C02]" xmlns="http://www.w3.org/2000/svg">
+        <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+    </svg>
+)
+
 export default function StravaData() {
     const [data, setData]           = useState<DashboardData | null>(null)
     const [loading, setLoading]     = useState(true)   // true only on first load with no cache
@@ -158,17 +177,6 @@ export default function StravaData() {
         }
     }, [fetchFromAPI, refresh])
 
-    const formatDuration = (seconds: number) => {
-        const hours = Math.floor(seconds / 3600)
-        const minutes = Math.floor((seconds % 3600) / 60)
-        return `${hours}h ${minutes}m`
-    }
-
-    const formatDistance = (distance: number): string => {
-        const km = distance / 1000
-        return `${new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(km)} km`
-    }
-
     const handleLogout = async () => {
         try {
             const response = await fetch('/api/strava/auth/logout', { method: 'POST' })
@@ -182,19 +190,22 @@ export default function StravaData() {
         }
     }
 
-    // Derive sport types and filtered activities
-    const sportTypes = data ? Array.from(new Set(data.chartActivities.map(a => a.type))).sort() : []
-    const filteredActivities = data
-        ? sportFilter === 'all'
-            ? data.chartActivities
-            : data.chartActivities.filter(a => a.type === sportFilter)
-        : []
+    const sportTypes = useMemo(() =>
+        data ? Array.from(new Set(data.chartActivities.map(a => a.type))).sort() : []
+    , [data])
 
-    const StravaLogo = () => (
-        <svg viewBox="0 0 24 24" className="w-5 h-5 fill-[#FC4C02]" xmlns="http://www.w3.org/2000/svg">
-            <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
-        </svg>
-    )
+    const filteredActivities = useMemo(() => {
+        if (!data) return []
+        if (sportFilter === 'all') return data.chartActivities
+        return data.chartActivities.filter(a => a.type === sportFilter)
+    }, [data, sportFilter])
+
+    const sportCounts = useMemo(() => {
+        if (!data) return {} as Record<string, number>
+        const counts: Record<string, number> = {}
+        for (const a of data.chartActivities) counts[a.type] = (counts[a.type] || 0) + 1
+        return counts
+    }, [data])
 
     if (loading) {
         return (
@@ -295,7 +306,7 @@ export default function StravaData() {
             </header>
             <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 relative z-10">
                 {/* Sport filter — shown on chart, yearly, and heatmap tabs */}
-                {activeTab !== 'stats' && sportTypes.length > 1 && (
+                {activeTab !== 'stats' && activeTab !== 'activities' && sportTypes.length > 1 && (
                     <div className="flex items-center gap-1.5 mb-3 sm:mb-4 overflow-x-auto pb-1">
                         <button
                             onClick={() => setSportFilter('all')}
@@ -308,7 +319,7 @@ export default function StravaData() {
                             All ({data.chartActivities.length})
                         </button>
                         {sportTypes.map(type => {
-                            const count = data.chartActivities.filter(a => a.type === type).length
+                            const count = sportCounts[type] || 0
                             return (
                                 <button
                                     key={type}
@@ -328,6 +339,11 @@ export default function StravaData() {
 
                 {activeTab === 'stats' && (
                     <Stats athleteStats={data.athleteStats} formatDistance={formatDistance} formatDuration={formatDuration} />
+                )}
+                {activeTab === 'activities' && (
+                    <div className="h-[calc(100vh-7rem)] sm:h-[calc(100vh-8rem)]">
+                        <ActivitiesTable activities={data.chartActivities} />
+                    </div>
                 )}
                 {activeTab === 'chart' && (
                     <div className="h-[calc(100vh-10rem)] sm:h-[calc(100vh-11rem)]">
