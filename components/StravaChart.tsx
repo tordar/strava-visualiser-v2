@@ -196,7 +196,9 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
 
         for (let d = 0; d < daysInYear; d++) {
             const date = new Date(selectedYear, 0, 1 + d)
-            const dateKey = date.toISOString().slice(0, 10)
+            const mm = String(date.getMonth() + 1).padStart(2, '0')
+            const dd = String(date.getDate()).padStart(2, '0')
+            const dateKey = `${selectedYear}-${mm}-${dd}`
             const dayActivities = dayMap.get(dateKey)
             const isFirstOfMonth = date.getDate() === 1
             const label = isFirstOfMonth ? monthNames[date.getMonth()] : ''
