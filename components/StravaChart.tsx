@@ -223,36 +223,7 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
 
         const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-        if (selectedYear === null) {
-            // All-time view: current behavior
-            return sorted.map(activity => {
-                const isRace = activity.workout_type === 1
-                const dist = parseFloat((activity.distance / 1000).toFixed(2))
-                return {
-                    date: new Date(activity.start_date_local).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
-                    fullDate: new Date(activity.start_date_local).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
-                    name: activity.name,
-                    distance: dist,
-                    movingTime: activity.moving_time,
-                    elevation: activity.total_elevation_gain,
-                    isRace,
-                    raceDistance: isRace ? dist : null,
-                    polyline: isRace && activity.map?.summary_polyline
-                        ? decodePolyline(activity.map.summary_polyline)
-                        : null,
-                }
-            })
-        }
-
-        // Year view — group activities by date key
-        const yearActivities = sorted.filter(a => new Date(a.start_date_local).getFullYear() === selectedYear)
-        const dayMap = new Map<string, typeof yearActivities>()
-        for (const a of yearActivities) {
-            const dateKey = a.start_date_local.slice(0, 10)
-            if (!dayMap.has(dateKey)) dayMap.set(dateKey, [])
-            dayMap.get(dateKey)!.push(a)
-        }
-
+        // Shared helper to aggregate a bucket of activities into a ChartEntry
         function aggregateBucket(bucketActivities: StravaActivity[], label: string, fullDateLabel: string): ChartEntry {
             if (bucketActivities.length === 0) {
                 return { date: label, fullDate: fullDateLabel, name: '', distance: 0, movingTime: 0, elevation: 0, isRace: false, raceDistance: null, polyline: null }
@@ -275,55 +246,121 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
             }
         }
 
+        // Build day map for the relevant activities
+        const scopedActivities = selectedYear === null ? sorted : sorted.filter(a => new Date(a.start_date_local).getFullYear() === selectedYear)
+        const dayMap = new Map<string, StravaActivity[]>()
+        for (const a of scopedActivities) {
+            const dateKey = a.start_date_local.slice(0, 10)
+            if (!dayMap.has(dateKey)) dayMap.set(dateKey, [])
+            dayMap.get(dateKey)!.push(a)
+        }
+
+        // Per-activity view (no aggregation, all-time only)
+        if (selectedYear === null && aggregation === 'day') {
+            return sorted.map(activity => {
+                const isRace = activity.workout_type === 1
+                const dist = parseFloat((activity.distance / 1000).toFixed(2))
+                return {
+                    date: new Date(activity.start_date_local).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
+                    fullDate: new Date(activity.start_date_local).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
+                    name: activity.name,
+                    distance: dist,
+                    movingTime: activity.moving_time,
+                    elevation: activity.total_elevation_gain,
+                    isRace,
+                    raceDistance: isRace ? dist : null,
+                    polyline: isRace && activity.map?.summary_polyline
+                        ? decodePolyline(activity.map.summary_polyline)
+                        : null,
+                }
+            })
+        }
+
+        // Month aggregation
         if (aggregation === 'month') {
             const entries: ChartEntry[] = []
-            for (let m = 0; m < 12; m++) {
-                const daysInMonth = new Date(selectedYear, m + 1, 0).getDate()
-                const bucketActivities: StravaActivity[] = []
-                for (let d = 1; d <= daysInMonth; d++) {
-                    const mm = String(m + 1).padStart(2, '0')
-                    const dd = String(d).padStart(2, '0')
-                    const acts = dayMap.get(`${selectedYear}-${mm}-${dd}`)
-                    if (acts) bucketActivities.push(...acts)
+            if (selectedYear !== null) {
+                for (let m = 0; m < 12; m++) {
+                    const daysInMonth = new Date(selectedYear, m + 1, 0).getDate()
+                    const bucketActivities: StravaActivity[] = []
+                    for (let d = 1; d <= daysInMonth; d++) {
+                        const mm = String(m + 1).padStart(2, '0')
+                        const dd = String(d).padStart(2, '0')
+                        const acts = dayMap.get(`${selectedYear}-${mm}-${dd}`)
+                        if (acts) bucketActivities.push(...acts)
+                    }
+                    entries.push(aggregateBucket(bucketActivities, monthNames[m], `${monthNames[m]} ${selectedYear}`))
                 }
-                entries.push(aggregateBucket(bucketActivities, monthNames[m], `${monthNames[m]} ${selectedYear}`))
+            } else {
+                // All-time: one bar per month across all years
+                const firstDate = new Date(sorted[0].start_date_local)
+                const lastDate = new Date(sorted[sorted.length - 1].start_date_local)
+                let y = firstDate.getFullYear(), m = firstDate.getMonth()
+                const endY = lastDate.getFullYear(), endM = lastDate.getMonth()
+                while (y < endY || (y === endY && m <= endM)) {
+                    const daysInMonth = new Date(y, m + 1, 0).getDate()
+                    const bucketActivities: StravaActivity[] = []
+                    for (let d = 1; d <= daysInMonth; d++) {
+                        const mm = String(m + 1).padStart(2, '0')
+                        const dd = String(d).padStart(2, '0')
+                        const acts = dayMap.get(`${y}-${mm}-${dd}`)
+                        if (acts) bucketActivities.push(...acts)
+                    }
+                    const label = m === 0 ? `${monthNames[m]} '${String(y).slice(2)}` : monthNames[m]
+                    entries.push(aggregateBucket(bucketActivities, label, `${monthNames[m]} ${y}`))
+                    m++
+                    if (m > 11) { m = 0; y++ }
+                }
             }
             return entries
         }
 
+        // Week aggregation
         if (aggregation === 'week') {
             const entries: ChartEntry[] = []
-            // Start from Jan 1, generate ISO-style weeks (Mon-Sun)
-            const jan1 = new Date(selectedYear, 0, 1)
-            // Find the Monday on or before Jan 1
-            const startDay = jan1.getDay() // 0=Sun
+            const rangeStart = selectedYear !== null ? new Date(selectedYear, 0, 1) : new Date(sorted[0].start_date_local)
+            const rangeEnd = selectedYear !== null ? new Date(selectedYear, 11, 31) : new Date(sorted[sorted.length - 1].start_date_local)
+
+            // Find Monday on or before rangeStart
+            const startDay = rangeStart.getDay()
             const mondayOffset = startDay === 0 ? -6 : 1 - startDay
-            let weekStart = new Date(selectedYear, 0, 1 + mondayOffset)
+            let weekStart = new Date(rangeStart)
+            weekStart.setDate(weekStart.getDate() + mondayOffset)
             let weekNum = 1
 
-            while (weekStart.getFullYear() <= selectedYear) {
+            while (weekStart <= rangeEnd) {
                 const weekEnd = new Date(weekStart)
                 weekEnd.setDate(weekEnd.getDate() + 6)
-                // Only include weeks that overlap with this year
-                if (weekEnd.getFullYear() < selectedYear) {
-                    weekStart = new Date(weekEnd)
-                    weekStart.setDate(weekStart.getDate() + 1)
-                    continue
+
+                if (selectedYear !== null) {
+                    if (weekEnd.getFullYear() < selectedYear) {
+                        weekStart = new Date(weekEnd)
+                        weekStart.setDate(weekStart.getDate() + 1)
+                        continue
+                    }
+                    if (weekStart.getFullYear() > selectedYear) break
                 }
-                if (weekStart.getFullYear() > selectedYear) break
 
                 const bucketActivities: StravaActivity[] = []
                 for (let d = 0; d < 7; d++) {
                     const day = new Date(weekStart)
                     day.setDate(day.getDate() + d)
-                    if (day.getFullYear() !== selectedYear) continue
+                    if (selectedYear !== null && day.getFullYear() !== selectedYear) continue
                     const mm = String(day.getMonth() + 1).padStart(2, '0')
                     const dd = String(day.getDate()).padStart(2, '0')
-                    const acts = dayMap.get(`${selectedYear}-${mm}-${dd}`)
+                    const acts = dayMap.get(`${day.getFullYear()}-${mm}-${dd}`)
                     if (acts) bucketActivities.push(...acts)
                 }
 
-                const weekLabel = weekStart.getDate() === 1 || weekNum === 1 ? monthNames[weekStart.getMonth()] : `W${weekNum}`
+                let weekLabel: string
+                if (selectedYear !== null) {
+                    weekLabel = weekStart.getDate() === 1 || weekNum === 1 ? monthNames[weekStart.getMonth()] : `W${weekNum}`
+                } else {
+                    // All-time: show month name at start of each month
+                    weekLabel = weekStart.getDate() <= 7 && weekStart.getDate() >= 1
+                        ? `${monthNames[weekStart.getMonth()]}${weekStart.getMonth() === 0 ? " '" + String(weekStart.getFullYear()).slice(2) : ''}`
+                        : ''
+                }
                 const fullLabel = `W${weekNum}: ${weekStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${weekEnd.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
                 entries.push(aggregateBucket(bucketActivities, weekLabel, fullLabel))
 
@@ -334,13 +371,13 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
             return entries
         }
 
-        // Day view (default)
-        const isLeap = (selectedYear % 4 === 0 && selectedYear % 100 !== 0) || selectedYear % 400 === 0
+        // Day view with year selected — one entry per calendar day
+        const isLeap = (selectedYear! % 4 === 0 && selectedYear! % 100 !== 0) || selectedYear! % 400 === 0
         const daysInYear = isLeap ? 366 : 365
         const entries: ChartEntry[] = []
 
         for (let d = 0; d < daysInYear; d++) {
-            const date = new Date(selectedYear, 0, 1 + d)
+            const date = new Date(selectedYear!, 0, 1 + d)
             const mm = String(date.getMonth() + 1).padStart(2, '0')
             const dd = String(date.getDate()).padStart(2, '0')
             const dateKey = `${selectedYear}-${mm}-${dd}`
@@ -449,23 +486,21 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
                             <option key={y} value={y}>{y}</option>
                         ))}
                     </select>
-                    {selectedYear !== null && (
-                        <div className="flex items-center bg-white/[0.03] rounded-lg p-0.5 gap-0.5">
-                            {(['day', 'week', 'month'] as const).map(mode => (
-                                <button
-                                    key={mode}
-                                    onClick={() => setAggregation(mode)}
-                                    className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors cursor-pointer capitalize ${
-                                        aggregation === mode
-                                            ? 'bg-white/[0.08] text-white'
-                                            : 'text-[#52525b] hover:text-[#a1a1aa]'
-                                    }`}
-                                >
-                                    {mode === 'day' ? 'D' : mode === 'week' ? 'W' : 'M'}
-                                </button>
-                            ))}
-                        </div>
-                    )}
+                    <div className="flex items-center bg-white/[0.03] rounded-lg p-0.5 gap-0.5">
+                        {(['day', 'week', 'month'] as const).map(mode => (
+                            <button
+                                key={mode}
+                                onClick={() => setAggregation(mode)}
+                                className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors cursor-pointer capitalize ${
+                                    aggregation === mode
+                                        ? 'bg-white/[0.08] text-white'
+                                        : 'text-[#52525b] hover:text-[#a1a1aa]'
+                                }`}
+                            >
+                                {mode === 'day' ? 'D' : mode === 'week' ? 'W' : 'M'}
+                            </button>
+                        ))}
+                    </div>
                     <div className="text-right hidden sm:block">
                         <p className="text-xs text-[#52525b]">Total Distance</p>
                         <p className="text-sm font-bold text-white tabular-nums">
@@ -518,11 +553,10 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
                             tick={{ fill: '#52525b', fontSize: 10 }}
                             tickLine={false}
                             axisLine={false}
-                            interval={selectedYear !== null ? undefined : Math.max(0, Math.floor(chartDataWithPBs.length / 8) - 1)}
-                            angle={selectedYear !== null ? 0 : -35}
-                            textAnchor={selectedYear !== null ? 'middle' : 'end'}
-                            height={selectedYear !== null ? 30 : 50}
-                            tickFormatter={selectedYear !== null ? (value: string) => value : undefined}
+                            interval={aggregation !== 'day' || selectedYear !== null ? undefined : Math.max(0, Math.floor(chartDataWithPBs.length / 8) - 1)}
+                            angle={aggregation === 'day' && selectedYear === null ? -35 : 0}
+                            textAnchor={aggregation === 'day' && selectedYear === null ? 'end' : 'middle'}
+                            height={aggregation === 'day' && selectedYear === null ? 50 : 30}
                         />
                         <YAxis stroke="transparent" tick={{ fill: '#52525b', fontSize: 11 }} tickLine={false} axisLine={false} />
                         <Tooltip
