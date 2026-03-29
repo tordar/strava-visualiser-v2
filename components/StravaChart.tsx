@@ -303,31 +303,46 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
     }, [activities, selectedYear])
 
     const chartDataWithPBs = React.useMemo(() => {
-        const pbByFullDate = new Map<string, PBMarker[]>()
-
+        // Collect all efforts per distance, find current top 3 by fastest time
+        const effortsByDist = new Map<string, { effort: { moving_time: number; distance: number; name: string }; activity: typeof activities[number] }[]>()
         for (const activity of activities) {
             if (!activity.best_efforts) continue
             for (const effort of activity.best_efforts) {
                 if (!PB_DISTANCES.includes(effort.name as typeof PB_DISTANCES[number])) continue
-                if (!effort.pr_rank || effort.pr_rank > 3) continue
+                if (!effortsByDist.has(effort.name)) effortsByDist.set(effort.name, [])
+                effortsByDist.get(effort.name)!.push({ effort, activity })
+            }
+        }
 
-                const fullDate = new Date(activity.start_date_local).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
-
+        // Build a set of activity IDs that are in the current top 3 for any distance
+        const top3Markers = new Map<number, PBMarker[]>() // activityId -> markers
+        for (const [, efforts] of effortsByDist) {
+            const sorted = [...efforts].sort((a, b) => a.effort.moving_time - b.effort.moving_time)
+            for (let rank = 0; rank < Math.min(3, sorted.length); rank++) {
+                const { effort, activity } = sorted[rank]
                 const marker: PBMarker = {
                     distanceName: effort.name,
                     displayName: PB_DISPLAY_NAMES[effort.name] || effort.name,
-                    prRank: effort.pr_rank,
+                    prRank: rank + 1,
                     movingTime: effort.moving_time,
                     effortDistance: effort.distance,
                     activityName: activity.name,
-                    fullDate,
+                    fullDate: new Date(activity.start_date_local).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
                     polyline: activity.map?.summary_polyline
                         ? decodePolyline(activity.map.summary_polyline)
                         : null,
                 }
+                if (!top3Markers.has(activity.id)) top3Markers.set(activity.id, [])
+                top3Markers.get(activity.id)!.push(marker)
+            }
+        }
 
-                if (!pbByFullDate.has(fullDate)) pbByFullDate.set(fullDate, [])
-                pbByFullDate.get(fullDate)!.push(marker)
+        // Build fullDate -> markers lookup from top3 only
+        const pbByFullDate = new Map<string, PBMarker[]>()
+        for (const [, markers] of top3Markers) {
+            for (const m of markers) {
+                if (!pbByFullDate.has(m.fullDate)) pbByFullDate.set(m.fullDate, [])
+                pbByFullDate.get(m.fullDate)!.push(m)
             }
         }
 
