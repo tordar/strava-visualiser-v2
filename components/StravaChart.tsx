@@ -207,6 +207,7 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
     const [hoveredPB, setHoveredPB] = React.useState<{ marker: PBMarker; x: number; y: number } | null>(null)
 
     const [selectedYear, setSelectedYear] = React.useState<number | null>(null)
+    const [aggregation, setAggregation] = React.useState<'day' | 'week' | 'month'>('day')
 
     const availableYears = React.useMemo(() => {
         if (!activities || activities.length === 0) return []
@@ -219,6 +220,8 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
 
         const sorted = [...activities]
             .sort((a, b) => new Date(a.start_date_local).getTime() - new Date(b.start_date_local).getTime())
+
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
         if (selectedYear === null) {
             // All-time view: current behavior
@@ -241,66 +244,114 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
             })
         }
 
-        // Year view: one entry per calendar day
-        const isLeap = (selectedYear % 4 === 0 && selectedYear % 100 !== 0) || selectedYear % 400 === 0
-        const daysInYear = isLeap ? 366 : 365
-
-        // Group activities by day-of-year
+        // Year view — group activities by date key
         const yearActivities = sorted.filter(a => new Date(a.start_date_local).getFullYear() === selectedYear)
         const dayMap = new Map<string, typeof yearActivities>()
         for (const a of yearActivities) {
-            const dateKey = a.start_date_local.slice(0, 10) // "YYYY-MM-DD"
+            const dateKey = a.start_date_local.slice(0, 10)
             if (!dayMap.has(dateKey)) dayMap.set(dateKey, [])
             dayMap.get(dateKey)!.push(a)
         }
 
+        function aggregateBucket(bucketActivities: StravaActivity[], label: string, fullDateLabel: string): ChartEntry {
+            if (bucketActivities.length === 0) {
+                return { date: label, fullDate: fullDateLabel, name: '', distance: 0, movingTime: 0, elevation: 0, isRace: false, raceDistance: null, polyline: null }
+            }
+            const totalDist = bucketActivities.reduce((sum, a) => sum + a.distance / 1000, 0)
+            const totalTime = bucketActivities.reduce((sum, a) => sum + a.moving_time, 0)
+            const totalElev = bucketActivities.reduce((sum, a) => sum + a.total_elevation_gain, 0)
+            const hasRace = bucketActivities.some(a => a.workout_type === 1)
+            const raceActivity = bucketActivities.find(a => a.workout_type === 1)
+            return {
+                date: label,
+                fullDate: fullDateLabel,
+                name: bucketActivities.length === 1 ? bucketActivities[0].name : `${bucketActivities.length} activities`,
+                distance: parseFloat(totalDist.toFixed(2)),
+                movingTime: totalTime,
+                elevation: totalElev,
+                isRace: hasRace,
+                raceDistance: hasRace ? parseFloat(totalDist.toFixed(2)) : null,
+                polyline: raceActivity?.map?.summary_polyline ? decodePolyline(raceActivity.map.summary_polyline) : null,
+            }
+        }
+
+        if (aggregation === 'month') {
+            const entries: ChartEntry[] = []
+            for (let m = 0; m < 12; m++) {
+                const daysInMonth = new Date(selectedYear, m + 1, 0).getDate()
+                const bucketActivities: StravaActivity[] = []
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const mm = String(m + 1).padStart(2, '0')
+                    const dd = String(d).padStart(2, '0')
+                    const acts = dayMap.get(`${selectedYear}-${mm}-${dd}`)
+                    if (acts) bucketActivities.push(...acts)
+                }
+                entries.push(aggregateBucket(bucketActivities, monthNames[m], `${monthNames[m]} ${selectedYear}`))
+            }
+            return entries
+        }
+
+        if (aggregation === 'week') {
+            const entries: ChartEntry[] = []
+            // Start from Jan 1, generate ISO-style weeks (Mon-Sun)
+            const jan1 = new Date(selectedYear, 0, 1)
+            // Find the Monday on or before Jan 1
+            const startDay = jan1.getDay() // 0=Sun
+            const mondayOffset = startDay === 0 ? -6 : 1 - startDay
+            let weekStart = new Date(selectedYear, 0, 1 + mondayOffset)
+            let weekNum = 1
+
+            while (weekStart.getFullYear() <= selectedYear) {
+                const weekEnd = new Date(weekStart)
+                weekEnd.setDate(weekEnd.getDate() + 6)
+                // Only include weeks that overlap with this year
+                if (weekEnd.getFullYear() < selectedYear) {
+                    weekStart = new Date(weekEnd)
+                    weekStart.setDate(weekStart.getDate() + 1)
+                    continue
+                }
+                if (weekStart.getFullYear() > selectedYear) break
+
+                const bucketActivities: StravaActivity[] = []
+                for (let d = 0; d < 7; d++) {
+                    const day = new Date(weekStart)
+                    day.setDate(day.getDate() + d)
+                    if (day.getFullYear() !== selectedYear) continue
+                    const mm = String(day.getMonth() + 1).padStart(2, '0')
+                    const dd = String(day.getDate()).padStart(2, '0')
+                    const acts = dayMap.get(`${selectedYear}-${mm}-${dd}`)
+                    if (acts) bucketActivities.push(...acts)
+                }
+
+                const weekLabel = weekStart.getDate() === 1 || weekNum === 1 ? monthNames[weekStart.getMonth()] : `W${weekNum}`
+                const fullLabel = `W${weekNum}: ${weekStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${weekEnd.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                entries.push(aggregateBucket(bucketActivities, weekLabel, fullLabel))
+
+                weekStart = new Date(weekEnd)
+                weekStart.setDate(weekStart.getDate() + 1)
+                weekNum++
+            }
+            return entries
+        }
+
+        // Day view (default)
+        const isLeap = (selectedYear % 4 === 0 && selectedYear % 100 !== 0) || selectedYear % 400 === 0
+        const daysInYear = isLeap ? 366 : 365
         const entries: ChartEntry[] = []
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
         for (let d = 0; d < daysInYear; d++) {
             const date = new Date(selectedYear, 0, 1 + d)
             const mm = String(date.getMonth() + 1).padStart(2, '0')
             const dd = String(date.getDate()).padStart(2, '0')
             const dateKey = `${selectedYear}-${mm}-${dd}`
-            const dayActivities = dayMap.get(dateKey)
+            const dayActivities = dayMap.get(dateKey) || []
             const isFirstOfMonth = date.getDate() === 1
             const label = isFirstOfMonth ? monthNames[date.getMonth()] : ''
-
-            if (dayActivities && dayActivities.length > 0) {
-                const totalDist = dayActivities.reduce((sum, a) => sum + a.distance / 1000, 0)
-                const totalTime = dayActivities.reduce((sum, a) => sum + a.moving_time, 0)
-                const totalElev = dayActivities.reduce((sum, a) => sum + a.total_elevation_gain, 0)
-                const hasRace = dayActivities.some(a => a.workout_type === 1)
-                const raceActivity = dayActivities.find(a => a.workout_type === 1)
-                entries.push({
-                    date: label,
-                    fullDate: date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
-                    name: dayActivities.length === 1 ? dayActivities[0].name : `${dayActivities.length} activities`,
-                    distance: parseFloat(totalDist.toFixed(2)),
-                    movingTime: totalTime,
-                    elevation: totalElev,
-                    isRace: hasRace,
-                    raceDistance: hasRace ? parseFloat(totalDist.toFixed(2)) : null,
-                    polyline: raceActivity?.map?.summary_polyline
-                        ? decodePolyline(raceActivity.map.summary_polyline)
-                        : null,
-                })
-            } else {
-                entries.push({
-                    date: label,
-                    fullDate: date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
-                    name: '',
-                    distance: 0,
-                    movingTime: 0,
-                    elevation: 0,
-                    isRace: false,
-                    raceDistance: null,
-                    polyline: null,
-                })
-            }
+            const fullDateLabel = date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+            entries.push(aggregateBucket(dayActivities, label, fullDateLabel))
         }
         return entries
-    }, [activities, selectedYear])
+    }, [activities, selectedYear, aggregation])
 
     const chartDataWithPBs = React.useMemo(() => {
         // Collect all efforts per distance, find current top 3 by fastest time
@@ -316,7 +367,7 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
 
         // Build a set of activity IDs that are in the current top 3 for any distance
         const top3Markers = new Map<number, PBMarker[]>() // activityId -> markers
-        for (const [, efforts] of effortsByDist) {
+        Array.from(effortsByDist.values()).forEach(efforts => {
             const sorted = [...efforts].sort((a, b) => a.effort.moving_time - b.effort.moving_time)
             for (let rank = 0; rank < Math.min(3, sorted.length); rank++) {
                 const { effort, activity } = sorted[rank]
@@ -335,16 +386,16 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
                 if (!top3Markers.has(activity.id)) top3Markers.set(activity.id, [])
                 top3Markers.get(activity.id)!.push(marker)
             }
-        }
+        })
 
         // Build fullDate -> markers lookup from top3 only
         const pbByFullDate = new Map<string, PBMarker[]>()
-        for (const [, markers] of top3Markers) {
+        Array.from(top3Markers.values()).forEach(markers => {
             for (const m of markers) {
                 if (!pbByFullDate.has(m.fullDate)) pbByFullDate.set(m.fullDate, [])
                 pbByFullDate.get(m.fullDate)!.push(m)
             }
-        }
+        })
 
         return chartData.map(entry => {
             const markers = pbByFullDate.get(entry.fullDate)
@@ -398,6 +449,23 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
                             <option key={y} value={y}>{y}</option>
                         ))}
                     </select>
+                    {selectedYear !== null && (
+                        <div className="flex items-center bg-white/[0.03] rounded-lg p-0.5 gap-0.5">
+                            {(['day', 'week', 'month'] as const).map(mode => (
+                                <button
+                                    key={mode}
+                                    onClick={() => setAggregation(mode)}
+                                    className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors cursor-pointer capitalize ${
+                                        aggregation === mode
+                                            ? 'bg-white/[0.08] text-white'
+                                            : 'text-[#52525b] hover:text-[#a1a1aa]'
+                                    }`}
+                                >
+                                    {mode === 'day' ? 'D' : mode === 'week' ? 'W' : 'M'}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     <div className="text-right hidden sm:block">
                         <p className="text-xs text-[#52525b]">Total Distance</p>
                         <p className="text-sm font-bold text-white tabular-nums">
