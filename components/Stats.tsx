@@ -8,6 +8,7 @@ import { AnimatedNumber } from './AnimatedNumber'
 import { SpotlightCard } from './SpotlightCard'
 import { StravaActivity } from '@/types/strava'
 import { PBStats } from './PBStats'
+import { activityElevation } from '@/lib/utils'
 
 interface StatsProps {
     activities: StravaActivity[]
@@ -103,7 +104,7 @@ export function Stats({ activities, sportFilter, sportTypes, sportCounts, onSpor
         count: list.length,
         distance: list.reduce((s, a) => s + a.distance, 0),
         moving_time: list.reduce((s, a) => s + a.moving_time, 0),
-        elevation_gain: list.reduce((s, a) => s + a.total_elevation_gain, 0),
+        elevation_gain: list.reduce((s, a) => s + activityElevation(a), 0),
     })
 
     const allTime = useMemo(() => aggregate(filtered), [filtered])

@@ -15,6 +15,8 @@ export interface StravaActivity {
     distance: number
     moving_time: number
     total_elevation_gain: number
+    elev_high?: number
+    elev_low?: number
     start_date_local: string
     start_latlng: [number, number] | null
     workout_type?: number | null

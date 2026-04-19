@@ -7,6 +7,7 @@ import L from 'leaflet'
 import { MapPin } from 'lucide-react'
 import { StravaActivity } from '@/types/strava'
 import { decodePolyline } from '@/lib/polyline'
+import { activityElevation } from '@/lib/utils'
 import { SpotlightCard } from './SpotlightCard'
 import TimelineControls from './TimelineControls'
 
@@ -278,7 +279,7 @@ export default function HeatmapContent({ activities }: HeatmapContentProps) {
                 date: a.start_date_local,
                 distance: a.distance,
                 moving_time: a.moving_time,
-                elevation: a.total_elevation_gain,
+                elevation: activityElevation(a),
                 positions: decodePolyline(a.map!.summary_polyline!) as L.LatLngExpression[],
             }))
     }, [activities])

@@ -5,6 +5,7 @@ import { motion } from "framer-motion"
 import { CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Bar, Scatter, Cell } from "recharts"
 import { StravaActivity } from "@/types/strava"
 import { decodePolyline } from '@/lib/polyline'
+import { activityElevation } from '@/lib/utils'
 import { AnimatedNumber } from './AnimatedNumber'
 import { SpotlightCard } from './SpotlightCard'
 import { Trophy, Medal } from 'lucide-react'
@@ -230,7 +231,7 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
             }
             const totalDist = bucketActivities.reduce((sum, a) => sum + a.distance / 1000, 0)
             const totalTime = bucketActivities.reduce((sum, a) => sum + a.moving_time, 0)
-            const totalElev = bucketActivities.reduce((sum, a) => sum + a.total_elevation_gain, 0)
+            const totalElev = bucketActivities.reduce((sum, a) => sum + activityElevation(a), 0)
             const hasRace = bucketActivities.some(a => a.workout_type === 1)
             const raceActivity = bucketActivities.find(a => a.workout_type === 1)
             return {
@@ -266,7 +267,7 @@ export default function ChartComponent({ activities }: ChartComponentProps) {
                     name: activity.name,
                     distance: dist,
                     movingTime: activity.moving_time,
-                    elevation: activity.total_elevation_gain,
+                    elevation: activityElevation(activity),
                     isRace,
                     raceDistance: isRace ? dist : null,
                     polyline: isRace && activity.map?.summary_polyline

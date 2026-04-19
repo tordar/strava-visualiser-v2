@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { ChevronUp, ChevronDown, Search, Trophy, ChevronsUpDown } from 'lucide-react'
 import { StravaActivity } from '@/types/strava'
 import { SpotlightCard } from './SpotlightCard'
+import { activityElevation } from '@/lib/utils'
 
 interface ActivitiesTableProps {
     activities: StravaActivity[]
@@ -87,7 +88,7 @@ export default function ActivitiesTable({ activities }: ActivitiesTableProps) {
                     cmp = (a.distance > 0 ? a.moving_time / a.distance : 0) - (b.distance > 0 ? b.moving_time / b.distance : 0)
                     break
                 case 'elevation':
-                    cmp = a.total_elevation_gain - b.total_elevation_gain
+                    cmp = activityElevation(a) - activityElevation(b)
                     break
             }
             return sortDir === 'asc' ? cmp : -cmp
@@ -181,7 +182,7 @@ export default function ActivitiesTable({ activities }: ActivitiesTableProps) {
                                 <td className="px-3 sm:px-4 py-2.5 text-white tabular-nums text-right font-medium">{(activity.distance / 1000).toFixed(2)} km</td>
                                 <td className="px-3 sm:px-4 py-2.5 text-[#a1a1aa] tabular-nums text-right hidden sm:table-cell">{formatDuration(activity.moving_time)}</td>
                                 <td className="px-3 sm:px-4 py-2.5 text-[#a1a1aa] tabular-nums text-right hidden sm:table-cell">{formatPace(activity.moving_time, activity.distance)} /km</td>
-                                <td className="px-3 sm:px-4 py-2.5 text-[#a1a1aa] tabular-nums text-right hidden sm:table-cell">{Math.round(activity.total_elevation_gain)} m</td>
+                                <td className="px-3 sm:px-4 py-2.5 text-[#a1a1aa] tabular-nums text-right hidden sm:table-cell">{Math.round(activityElevation(activity))} m</td>
                             </tr>
                         ))}
                         {paged.length === 0 && (
